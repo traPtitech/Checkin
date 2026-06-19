@@ -1,4 +1,5 @@
 export * from './client'
+export * from './connect'
 export * from './customers'
 export * from './invoices'
 export * from './listing'

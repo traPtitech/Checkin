@@ -15,6 +15,20 @@
       "when": 1781877502412,
       "tag": "0001_naive_stryfe",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1781882206587,
+      "tag": "0002_gifted_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1781882910210,
+      "tag": "0003_happy_cobalt_man",
+      "breakpoints": true
     }
   ]
 }

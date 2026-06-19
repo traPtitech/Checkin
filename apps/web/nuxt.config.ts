@@ -28,6 +28,8 @@ export default defineNuxtConfig({
     // Membership collection / Stripe
     stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? '',
     stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+    // Connect (account.updated) webhook signing secret — see add-connect-onboarding.
+    stripeConnectWebhookSecret: process.env.STRIPE_CONNECT_WEBHOOK_SECRET ?? '',
     priceShinkiZenki: process.env.PRICE_SHINKI_ZENKI ?? '',
     priceShinkiKouki: process.env.PRICE_SHINKI_KOUKI ?? '',
     priceKeizokuStandard: process.env.PRICE_KEIZOKU_STANDARD ?? '',

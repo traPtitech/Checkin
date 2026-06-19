@@ -12,6 +12,9 @@ export * from './billing'
 /** Payments-listing domain (Stripe-independent: row DTOs / Dashboard URL / pagination). */
 export * from './payments'
 
+/** Payout onboarding domain (Stripe-independent: readiness + state machine). */
+export * from './payouts'
+
 /** Stripe adapter layer (all Stripe SDK usage is isolated here). */
 export * from './stripe'
 

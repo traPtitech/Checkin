@@ -17,6 +17,21 @@ export const users = mysqlTable('users', {
   // so subsequent invoices reuse the same Customer. Plaintext email is still
   // never stored. (identity spec: §Stripe 参照は保持してよい)
   stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
+  // Stripe Connect connected-account reference (non-PII). Added by
+  // add-connect-onboarding: refunds need a payee account, so the onboarding flow
+  // does a get-or-create against Stripe Connect and persists the account id here.
+  // Plaintext email is still never stored. (identity spec: §Connect 参照・状態も保持してよい)
+  // Unique: a connected account belongs to exactly one person — the constraint
+  // is the last line of defence against a get-or-create race linking two rows /
+  // creating duplicate Stripe accounts. MariaDB allows multiple NULLs under a
+  // unique index, so nullable + unique is fine for the "not yet linked" case.
+  stripeConnectedAccountId: varchar('stripe_connected_account_id', { length: 255 }).unique(),
+  // Payout onboarding state machine: none → requested (link issued) → done
+  // (payouts_enabled + no requirements due). `done` is terminal. Non-PII status.
+  // (connect-onboarding spec: §onboarding の状態機械)
+  payoutOnboardingStatus: mysqlEnum('payout_onboarding_status', ['none', 'requested', 'done'])
+    .notNull()
+    .default('none'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow().onUpdateNow(),
 })

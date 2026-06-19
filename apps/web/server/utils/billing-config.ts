@@ -28,6 +28,7 @@ export function resolveBillingConfig(): BillingConfig {
     },
     stripeSecretKey: String(rc.stripeSecretKey ?? ''),
     stripeWebhookSecret: String(rc.stripeWebhookSecret ?? ''),
+    connectWebhookSecret: String(rc.stripeConnectWebhookSecret ?? ''),
     invoiceDaysUntilDue: num(rc.invoiceDaysUntilDue, 7),
   }
   return cached

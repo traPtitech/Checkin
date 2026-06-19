@@ -7,9 +7,18 @@ import {
   sanitizeRedirect,
   createEmailVerification,
   getUserById,
+  setPayoutOnboardingStatus,
 } from './auth'
 import { computeActivityYear, computeTerm, selectPriceId } from './billing'
-import { getOrCreateCustomer, issueInvoice, listCheckoutSessions, listInvoices } from './stripe'
+import {
+  createAccountOnboardingLink,
+  getOrCreateConnectedAccount,
+  getOrCreateCustomer,
+  issueInvoice,
+  listCheckoutSessions,
+  listInvoices,
+} from './stripe'
+import { nextOnboardingStatus } from './payouts'
 import {
   checkoutSessionToRow,
   clampLimit,
@@ -250,6 +259,69 @@ export const appRouter = {
 
         const items = page.data.map(session => checkoutSessionToRow(session, mode))
         return { items, hasMore: page.has_more, nextCursor: nextCursor(items, page.has_more) }
+      }),
+  },
+
+  payouts: {
+    /**
+     * Issue a Stripe **hosted** onboarding link for a payee's Connect connected
+     * account so refunds can later pay out to them. Admin (accountant) only:
+     * the accountant gets the URL and forwards it to the payee (we don't hold
+     * plaintext email). Get-or-create the connected account, create the Account
+     * Link, then mark the payee `requested` (unless already `done`).
+     * (connect-onboarding spec: §ホスト型 onboarding リンクの発行 / §発行は会計のみ)
+     */
+    createOnboardingLink: adminProc
+      .input(z.object({ userId: z.string().min(1) }))
+      .handler(async ({ input, context }) => {
+        context.assertCsrf()
+
+        const row = await getUserById(context.db, input.userId)
+        if (!row) {
+          throw new ORPCError('NOT_FOUND', { message: 'target user not found' })
+        }
+
+        const accountId = await getOrCreateConnectedAccount(context.stripe, context.db, {
+          userId: row.id,
+          stripeConnectedAccountId: row.stripeConnectedAccountId,
+          mailHash: row.mailHash,
+        })
+
+        // refresh/return land on app-origin pages (the UI is a later change).
+        const url = await createAccountOnboardingLink(context.stripe, {
+          accountId,
+          refreshUrl: `${context.config.appOrigin}/payouts/onboarding/refresh`,
+          returnUrl: `${context.config.appOrigin}/payouts/onboarding/return`,
+        })
+
+        // Issuing a link advances toward `requested`; `done` is terminal (no
+        // regress). `nextOnboardingStatus(_, false)` keeps `done`/`requested` and
+        // only `none` would stay `none` — so promote a non-`done` payee to
+        // `requested` (skips a redundant write when already `requested`).
+        const stayed = nextOnboardingStatus(row.payoutOnboardingStatus, false)
+        if (stayed !== 'done' && row.payoutOnboardingStatus !== 'requested') {
+          await setPayoutOnboardingStatus(context.db, row.id, 'requested')
+        }
+
+        return { url }
+      }),
+
+    /**
+     * Report a payee's onboarding status (and whether a connected account is
+     * linked yet) for the accountant. Read-only: admin, no `assertCsrf`.
+     * (connect-onboarding spec: §状態確認は会計のみ)
+     */
+    onboardingStatus: adminProc
+      .input(z.object({ userId: z.string().min(1) }))
+      .handler(async ({ input, context }) => {
+        const row = await getUserById(context.db, input.userId)
+        if (!row) {
+          throw new ORPCError('NOT_FOUND', { message: 'target user not found' })
+        }
+        return {
+          status: row.payoutOnboardingStatus,
+          hasConnectedAccount: row.stripeConnectedAccountId !== null,
+        }
       }),
   },
 }

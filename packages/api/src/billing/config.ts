@@ -20,6 +20,12 @@ export interface BillingConfig {
   stripeSecretKey: string
   /** Stripe webhook signing secret for `invoice.paid` verification. */
   stripeWebhookSecret: string
+  /**
+   * Stripe webhook signing secret for Connect `account.updated` verification.
+   * May differ from {@link stripeWebhookSecret} when Connect events use a
+   * separate endpoint (set the same value if they share one). (design D6)
+   */
+  connectWebhookSecret: string
   /** Days until an issued invoice is due (`send_invoice` collection). */
   invoiceDaysUntilDue: number
 }

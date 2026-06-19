@@ -13,6 +13,7 @@ const config: BillingConfig = {
   },
   stripeSecretKey: 'sk_test_x',
   stripeWebhookSecret: 'whsec_x',
+  connectWebhookSecret: 'whsec_connect_x',
   invoiceDaysUntilDue: 7,
 }
 
