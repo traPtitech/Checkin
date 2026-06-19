@@ -6,6 +6,8 @@ import type { SessionActor } from './auth/session'
 import type { AuthHelpers } from './auth/context'
 import type { BillingConfig } from './billing/config'
 import type { StripeClient } from './stripe/client'
+import type { JomonClient } from './jomon/types'
+import type { JomonConfig } from './jomon/config'
 import type { Notifier } from './notify/notifier'
 
 /**
@@ -22,6 +24,10 @@ export interface Context extends AuthHelpers {
   notifier: Notifier
   /** Lazy Stripe adapter — only instantiates the SDK when a procedure uses it. */
   stripe: StripeClient
+  /** Jomon client (pull adapter) — `stub` by default; live drivers are env-gated. */
+  jomon: JomonClient
+  /** Resolved Jomon config (carries the default payout currency). */
+  jomonConfig: JomonConfig
   /** The authenticated actor, or null when unauthenticated. */
   session: SessionActor | null
 }

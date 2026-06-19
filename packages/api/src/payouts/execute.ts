@@ -1,0 +1,407 @@
+import type { Database } from '@checkin/db'
+import { deriveMailHash } from '../auth/crypto'
+import { getUserById, getUserByMailHash } from '../auth/identity'
+import type { StripeClient } from '../stripe/client'
+import { createAccountOnboardingLink, getOrCreateConnectedAccount } from '../stripe/connect'
+import { createTransfer } from '../stripe/transfers'
+import type { JomonClient, JomonTransferRequest } from '../jomon/types'
+import { nextPayoutStatus, type PayoutStatus } from './status'
+import {
+  claimPayoutForExecution,
+  getPayoutByJomonRef,
+  setPayoutJomonWrittenBackAt,
+  setPayoutStatus,
+  setPayoutUserId,
+  upsertPayoutByJomonRef,
+  type PayoutRow,
+} from './store'
+
+/**
+ * Payout execution orchestration (design D4): thin wiring over the pure state
+ * machine. Stripe/Jomon access goes through the adapters passed in as args; this
+ * module never imports the Stripe SDK. It pulls approved requests, identifies the
+ * payee, gates on onboarding, runs the transfer (idempotently), and writes the
+ * result back to Jomon.
+ */
+
+/** Dependencies injected into the orchestration (host wires the concrete ones). */
+export interface PayoutDeps {
+  db: Database
+  stripe: StripeClient
+  jomon: JomonClient
+}
+
+/** Config the orchestration needs (resolved by the host). */
+export interface PayoutExecuteConfig {
+  /** HMAC secret to derive `mail_hash` from a payee email. */
+  mailHashSecret: string
+  /** App origin for onboarding refresh/return URLs. */
+  appOrigin: string
+  /** Default payout currency when a request omits one (e.g. 'jpy'). */
+  defaultCurrency: string
+}
+
+/**
+ * The outcome of advancing a single payout one step.
+ *   - `unresolved`: payee not identified by mail_hash — not paid out, 要対応.
+ *   - `onboarding_waiting`: onboarding not done — link issued, parked.
+ *   - `paid`: transfer succeeded.
+ *   - `failed`: transfer attempted but failed.
+ *   - `already_paid`: terminal `paid` — short-circuited, no re-transfer.
+ *   - `needs_review`: a guard prevented progress and a human must act, 要対応:
+ *       the resolved user differs from the immutably-linked one (mis-mapping), a
+ *       row was already claimed/`processing` by a concurrent run, or `processApproved`
+ *       skipped a `failed` row (only the admin `execute` may retry `failed`).
+ *   - `skipped_failed`: `processApproved` did not auto-retry a `failed` row.
+ */
+export type PayoutOutcome
+  = 'unresolved' | 'onboarding_waiting' | 'paid' | 'failed' | 'already_paid'
+    | 'needs_review' | 'skipped_failed'
+
+/** Per-payout result returned to callers (Stripe/Jomon-type-free). */
+export interface PayoutStepResult {
+  jomonRef: string
+  outcome: PayoutOutcome
+  status: PayoutStatus
+  /** Hosted onboarding URL, present when the outcome is `onboarding_waiting`. */
+  onboardingUrl?: string
+}
+
+/** Aggregate summary of a `processApproved` run. */
+export interface ProcessApprovedSummary {
+  /** Total approved requests ingested this run. */
+  ingested: number
+  /** Count newly/again paid out. */
+  paid: number
+  /** Count waiting on onboarding. */
+  onboardingWaiting: number
+  /** Count whose payee could not be identified (要対応). */
+  unresolved: number
+  /** Count whose transfer failed. */
+  failed: number
+  /** Count already `paid` and short-circuited. */
+  alreadyPaid: number
+  /** Count flagged for manual review (userId mis-map / claimed by another run). */
+  needsReview: number
+  /** Count of `failed` rows skipped (not auto-retried by `processApproved`). */
+  skippedFailed: number
+  /** Count of items that threw and were isolated (one bad item never aborts the batch). */
+  errored: number
+  /** `jomon_ref`s of items that threw, for accountant follow-up. */
+  errors: string[]
+}
+
+/**
+ * Ingest approved requests and advance each one step (the accounting trigger).
+ *
+ * Idempotent end-to-end: ingestion upserts by `jomon_ref`, `paid` payouts
+ * short-circuit, and the transfer uses a deterministic idempotency key — so a
+ * repeated run never double-pays. (design D4 / D5; spec §取込は jomon_ref で冪等)
+ */
+export async function processApprovedPayouts(
+  deps: PayoutDeps,
+  config: PayoutExecuteConfig,
+): Promise<ProcessApprovedSummary> {
+  const requests = await deps.jomon.listApprovedTransferRequests()
+
+  const summary: ProcessApprovedSummary = {
+    ingested: 0,
+    paid: 0,
+    onboardingWaiting: 0,
+    unresolved: 0,
+    failed: 0,
+    alreadyPaid: 0,
+    needsReview: 0,
+    skippedFailed: 0,
+    errored: 0,
+    errors: [],
+  }
+
+  for (const req of requests) {
+    // Per-item error isolation: one bad item (Jomon write-back, DB hiccup,
+    // malformed request, etc.) must NOT abort the rest of the batch. Record it
+    // and continue. (Codex hardening)
+    try {
+      // 1. Idempotent upsert by jomon_ref (preserves any existing state).
+      await upsertPayoutByJomonRef(deps.db, {
+        jomonRef: req.jomonRef,
+        amount: req.amount,
+        currency: req.currency || config.defaultCurrency,
+      })
+      summary.ingested += 1
+
+      // `processApproved` is the automated trigger: it must NOT auto-retry
+      // `failed` rows — only the admin single-item `execute` may. (Codex hardening)
+      const result = await advancePayout(deps, config, req, { allowFailedRetry: false })
+      tally(summary, result.outcome)
+    }
+    catch (err) {
+      summary.errored += 1
+      summary.errors.push(req.jomonRef)
+      // Swallow: isolation is the point. Detail is surfaced via the summary.
+      void err
+    }
+  }
+
+  return summary
+}
+
+/**
+ * Advance a single payout (by `jomonRef`) one step — for manual resume of an
+ * `onboarding_waiting` payout or a retry after `failed`. Re-pulls the request
+ * from Jomon so amount/payee are current; throws if it is no longer approved.
+ * (design D5: `payouts.execute`)
+ */
+export async function executePayout(
+  deps: PayoutDeps,
+  config: PayoutExecuteConfig,
+  jomonRef: string,
+): Promise<PayoutStepResult> {
+  const requests = await deps.jomon.listApprovedTransferRequests()
+  const req = requests.find(r => r.jomonRef === jomonRef)
+  if (!req) {
+    // It may have already settled (and been removed from "approved"). If we have
+    // a local row, advance using its stored amount/currency; else surface it.
+    const existing = await getPayoutByJomonRef(deps.db, jomonRef)
+    if (!existing) {
+      throw new Error(`payout not found and not approved in Jomon: ${jomonRef}`)
+    }
+    // Admin single-item path: `execute` MAY retry a `failed` row. (Codex hardening)
+    return advancePayout(deps, config, {
+      jomonRef: existing.jomonRef,
+      payeeEmail: '',
+      amount: existing.amount,
+      currency: existing.currency,
+    }, { allowFailedRetry: true })
+  }
+  // Ensure the row exists (idempotent) before advancing.
+  await upsertPayoutByJomonRef(deps.db, {
+    jomonRef: req.jomonRef,
+    amount: req.amount,
+    currency: req.currency || config.defaultCurrency,
+  })
+  // Admin single-item path: `execute` MAY retry a `failed` row. (Codex hardening)
+  return advancePayout(deps, config, req, { allowFailedRetry: true })
+}
+
+/** Options that gate how `advancePayout` treats certain statuses. */
+interface AdvanceOptions {
+  /**
+   * Whether a `failed` row may be retried. `processApproved` (automated trigger)
+   * passes `false` — it must NOT auto-retry failures; only the admin single-item
+   * `execute` passes `true`. (Codex hardening: §explicit retry policy for failed)
+   */
+  allowFailedRetry: boolean
+}
+
+/**
+ * Advance one payout exactly one step. Assumes the row already exists. Resolves
+ * the payee, enforces userId immutability, gates on onboarding, ATOMICALLY claims
+ * the row before the transfer, runs the transfer (idempotently), persists status,
+ * and writes the settled result back to Jomon. (design D4 + Codex hardening)
+ */
+async function advancePayout(
+  deps: PayoutDeps,
+  config: PayoutExecuteConfig,
+  req: JomonTransferRequest,
+  options: AdvanceOptions,
+): Promise<PayoutStepResult> {
+  const row = await getPayoutByJomonRef(deps.db, req.jomonRef)
+  if (!row) {
+    throw new Error(`payout row missing for jomon_ref: ${req.jomonRef}`)
+  }
+
+  // `paid` is terminal — never re-transfer. But the Jomon write-back is decoupled
+  // from the transfer: if a previous run paid but the write-back failed, retry
+  // ONLY the write-back here (it never re-transfers). (Codex hardening: §retryable
+  // write-back / spec §再実行は二重送金しない)
+  if (row.status === 'paid') {
+    if (row.jomonWrittenBackAt === null) {
+      await reattemptWriteBack(deps, row)
+    }
+    return { jomonRef: req.jomonRef, outcome: 'already_paid', status: 'paid' }
+  }
+
+  // A row already mid-flight (`processing`) was claimed by a concurrent run; do
+  // NOT advance/transfer it. Stale `processing` after a crash needs an admin's
+  // attention; the claim deliberately excludes `processing`, and Stripe's
+  // idempotency key prevents double money movement on any manual re-run.
+  if (row.status === 'processing') {
+    return { jomonRef: req.jomonRef, outcome: 'needs_review', status: 'processing' }
+  }
+
+  // Retry policy for `failed`: only the admin single-item `execute` may retry;
+  // `processApproved` skips them so the batch never auto-re-pays a failure. The
+  // atomic claim WHERE-clause stays inclusive of `failed`; we gate the difference
+  // here at the orchestration level. (Codex hardening: §explicit retry policy)
+  if (row.status === 'failed' && !options.allowFailedRetry) {
+    return { jomonRef: req.jomonRef, outcome: 'skipped_failed', status: 'failed' }
+  }
+
+  // 2. Identify the payee via the correspondence table (mail_hash). We prefer the
+  //    freshly-pulled email; an empty one (resume without a live request) falls
+  //    back to the already-linked userId. Unresolved ⇒ leave userId null, no payout.
+  const user = await resolvePayee(deps, config, req, row)
+  if (!user) {
+    return { jomonRef: req.jomonRef, outcome: 'unresolved', status: row.status }
+  }
+
+  // userId is IMMUTABLE once set. If a later run resolves a DIFFERENT user from
+  // the email, do NOT relink — that signals a mail mapping change / mis-route, so
+  // flag for manual review and never transfer. Only set userId when still null.
+  // (Codex hardening: §userId immutability)
+  if (row.userId === null) {
+    await setPayoutUserId(deps.db, req.jomonRef, user.id)
+  }
+  else if (row.userId !== user.id) {
+    return { jomonRef: req.jomonRef, outcome: 'needs_review', status: row.status }
+  }
+
+  // 3. Onboarding gate: not `done` ⇒ get-or-create the connected account, issue a
+  //    hosted onboarding link, and park the payout as `onboarding_waiting`.
+  if (user.payoutOnboardingStatus !== 'done') {
+    const accountId = await getOrCreateConnectedAccount(deps.stripe, deps.db, {
+      userId: user.id,
+      stripeConnectedAccountId: user.stripeConnectedAccountId,
+      mailHash: user.mailHash,
+    })
+    const onboardingUrl = await createAccountOnboardingLink(deps.stripe, {
+      accountId,
+      refreshUrl: `${config.appOrigin}/payouts/onboarding/refresh`,
+      returnUrl: `${config.appOrigin}/payouts/onboarding/return`,
+    })
+    const status = nextPayoutStatus(row.status, { onboardingDone: false })
+    await setPayoutStatus(deps.db, req.jomonRef, status)
+    return { jomonRef: req.jomonRef, outcome: 'onboarding_waiting', status, onboardingUrl }
+  }
+
+  // 4. Onboarding is `done`.
+  if (!user.stripeConnectedAccountId) {
+    // Defensive: `done` implies a linked account; if not, treat as not-ready.
+    const status = nextPayoutStatus(row.status, { onboardingDone: false })
+    await setPayoutStatus(deps.db, req.jomonRef, status)
+    return { jomonRef: req.jomonRef, outcome: 'onboarding_waiting', status }
+  }
+
+  // 4a. ATOMICALLY claim the row for execution BEFORE the transfer. Only one
+  //     concurrent run can flip a claimable row (`pending`/`onboarding_waiting`/
+  //     `failed`) to `processing`; the loser re-reads and short-circuits without
+  //     transferring, so two callers can never both pass the pre-transfer check
+  //     and double-pay. (Codex hardening: §atomic execution claim)
+  const claimed = await claimPayoutForExecution(deps.db, req.jomonRef)
+  if (!claimed) {
+    const fresh = await getPayoutByJomonRef(deps.db, req.jomonRef)
+    // Already paid by the winning run ⇒ short-circuit (retry write-back if needed).
+    if (fresh?.status === 'paid') {
+      if (fresh.jomonWrittenBackAt === null) {
+        await reattemptWriteBack(deps, fresh)
+      }
+      return { jomonRef: req.jomonRef, outcome: 'already_paid', status: 'paid' }
+    }
+    // Otherwise it is mid-flight (`processing`) or in an unexpected state ⇒ leave
+    // it to the winner / an admin. Never transfer. (stale `processing` = 要対応)
+    return { jomonRef: req.jomonRef, outcome: 'needs_review', status: fresh?.status ?? row.status }
+  }
+
+  // 4b. Claim won — run the transfer (idempotency key `payout:${ref}`; a retry
+  //     with the same key returns the original Transfer, never a second one) and
+  //     settle to `paid`+stripeTransferId or `failed`.
+  let transferOk: boolean
+  let transferId: string | undefined
+  let failureMessage: string | undefined
+  try {
+    const result = await createTransfer(deps.stripe, {
+      destinationAccountId: user.stripeConnectedAccountId,
+      amount: row.amount,
+      currency: row.currency,
+      idempotencyKey: `payout:${req.jomonRef}`,
+      metadata: { jomon_ref: req.jomonRef },
+    })
+    transferId = result.transferId
+    transferOk = true
+  }
+  catch (err) {
+    transferOk = false
+    failureMessage = err instanceof Error ? err.message : String(err)
+  }
+
+  // Settle from `processing`: success ⇒ `paid`, failure ⇒ `failed`. We never let
+  // a stale caller overwrite `paid` because the claim excludes `paid`/`processing`.
+  const status = transferOk ? 'paid' : 'failed'
+  await setPayoutStatus(deps.db, req.jomonRef, status, transferId)
+
+  // 5. Write the settled result back to Jomon, then record the write-back so a
+  //    later `paid` re-run does not repeat it. A failure here throws (caught and
+  //    isolated by the batch loop) and leaves jomonWrittenBackAt NULL, so the
+  //    write-back is retried on the next pass WITHOUT re-transferring.
+  await deps.jomon.writeBackResult(req.jomonRef, {
+    status: transferOk ? 'paid' : 'failed',
+    stripeTransferId: transferId,
+    message: failureMessage,
+  })
+  await setPayoutJomonWrittenBackAt(deps.db, req.jomonRef)
+
+  return {
+    jomonRef: req.jomonRef,
+    outcome: transferOk ? 'paid' : 'failed',
+    status,
+  }
+}
+
+/**
+ * Re-attempt ONLY the Jomon write-back for an already-`paid` payout whose
+ * write-back has not yet been recorded, then mark it done. Never re-transfers.
+ * (Codex hardening: §retryable write-back avoids re-transfer)
+ */
+async function reattemptWriteBack(deps: PayoutDeps, row: PayoutRow): Promise<void> {
+  await deps.jomon.writeBackResult(row.jomonRef, {
+    status: 'paid',
+    stripeTransferId: row.stripeTransferId ?? undefined,
+  })
+  await setPayoutJomonWrittenBackAt(deps.db, row.jomonRef)
+}
+
+/** Resolve the payee for a request: by fresh email, else by the linked userId. */
+async function resolvePayee(
+  deps: PayoutDeps,
+  config: PayoutExecuteConfig,
+  req: JomonTransferRequest,
+  row: PayoutRow,
+) {
+  if (req.payeeEmail) {
+    const mailHash = deriveMailHash(req.payeeEmail, config.mailHashSecret)
+    return getUserByMailHash(deps.db, mailHash)
+  }
+  // No email (resume of an existing row): use the already-linked payee if any.
+  if (row.userId) {
+    return getUserById(deps.db, row.userId)
+  }
+  return null
+}
+
+/** Increment the matching summary counter for an outcome. */
+function tally(summary: ProcessApprovedSummary, outcome: PayoutOutcome): void {
+  switch (outcome) {
+    case 'paid':
+      summary.paid += 1
+      break
+    case 'onboarding_waiting':
+      summary.onboardingWaiting += 1
+      break
+    case 'unresolved':
+      summary.unresolved += 1
+      break
+    case 'failed':
+      summary.failed += 1
+      break
+    case 'already_paid':
+      summary.alreadyPaid += 1
+      break
+    case 'needs_review':
+      summary.needsReview += 1
+      break
+    case 'skipped_failed':
+      summary.skippedFailed += 1
+      break
+  }
+}

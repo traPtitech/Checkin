@@ -29,6 +29,20 @@
       "when": 1781882910210,
       "tag": "0003_happy_cobalt_man",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1781883548651,
+      "tag": "0004_mature_sentinels",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1781884730370,
+      "tag": "0005_blushing_blindfold",
+      "breakpoints": true
     }
   ]
 }

@@ -18,7 +18,14 @@ import {
   listCheckoutSessions,
   listInvoices,
 } from './stripe'
-import { nextOnboardingStatus } from './payouts'
+import {
+  executePayout,
+  listPayouts,
+  nextOnboardingStatus,
+  processApprovedPayouts,
+  type PayoutExecuteConfig,
+  type PayoutStatus,
+} from './payouts'
 import {
   checkoutSessionToRow,
   clampLimit,
@@ -323,5 +330,63 @@ export const appRouter = {
           hasConnectedAccount: row.stripeConnectedAccountId !== null,
         }
       }),
+
+    /**
+     * Ingest Jomon's approved transfer requests and advance each one step
+     * (the accounting trigger). Admin (accountant) only + `assertCsrf` (it
+     * mutates: upserts payouts, may issue links / run transfers / write back).
+     * Returns a plain count summary — no Stripe/Jomon types leak out.
+     * Idempotent: jomon_ref upsert + `paid` short-circuit + Stripe idempotency
+     * key prevent double payouts. (payout-execution spec: §払い戻し操作は会計のみ)
+     */
+    processApproved: adminProc
+      .handler(async ({ context }) => {
+        context.assertCsrf()
+        return processApprovedPayouts(
+          { db: context.db, stripe: context.stripe, jomon: context.jomon },
+          payoutExecuteConfig(context),
+        )
+      }),
+
+    /**
+     * List payouts for the accountant, optionally filtered by status. Read-only:
+     * admin, no `assertCsrf`. Rows are Stripe/Jomon-type-free DTOs.
+     */
+    list: adminProc
+      .input(z.object({
+        status: z.enum(['pending', 'onboarding_waiting', 'processing', 'paid', 'failed']).optional(),
+      }))
+      .handler(async ({ input, context }) => {
+        const items = await listPayouts(context.db, { status: input.status as PayoutStatus | undefined })
+        return { items }
+      }),
+
+    /**
+     * Advance / retry a single payout by `jomon_ref` (manual resume of an
+     * `onboarding_waiting` payout or a retry after `failed`). Admin only +
+     * `assertCsrf`. Returns a plain step result (no Stripe/Jomon types).
+     */
+    execute: adminProc
+      .input(z.object({ jomonRef: z.string().min(1) }))
+      .handler(async ({ input, context }) => {
+        context.assertCsrf()
+        return executePayout(
+          { db: context.db, stripe: context.stripe, jomon: context.jomon },
+          payoutExecuteConfig(context),
+          input.jomonRef,
+        )
+      }),
   },
+}
+
+/** Build the payout orchestration config from the request Context. */
+function payoutExecuteConfig(context: {
+  config: { mailHashSecret: string, appOrigin: string }
+  jomonConfig: { payoutCurrency: string }
+}): PayoutExecuteConfig {
+  return {
+    mailHashSecret: context.config.mailHashSecret,
+    appOrigin: context.config.appOrigin,
+    defaultCurrency: context.jomonConfig.payoutCurrency,
+  }
 }

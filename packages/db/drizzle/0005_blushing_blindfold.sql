@@ -1,0 +1,2 @@
+ALTER TABLE `payouts` MODIFY COLUMN `status` enum('pending','onboarding_waiting','processing','paid','failed') NOT NULL DEFAULT 'pending';--> statement-breakpoint
+ALTER TABLE `payouts` ADD `jomon_written_back_at` timestamp;

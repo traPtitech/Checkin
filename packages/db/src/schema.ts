@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, timestamp, mysqlEnum } from 'drizzle-orm/mysql-core'
+import { mysqlTable, varchar, timestamp, mysqlEnum, int } from 'drizzle-orm/mysql-core'
 
 /**
  * Auth / identity foundation (OpenSpec change: add-auth-foundation).
@@ -79,4 +79,47 @@ export const stripeEvents = mysqlTable('stripe_events', {
   eventId: varchar('event_id', { length: 255 }).notNull().unique(),
   type: varchar('type', { length: 255 }).notNull(),
   receivedAt: timestamp('received_at').notNull().defaultNow(),
+})
+
+/**
+ * Approved transfer requests pulled from Jomon and paid out via Stripe Connect
+ * (OpenSpec change: add-payout-execution). Jomon owns approval/application;
+ * Checkin only executes the payout and writes the result back (design §5.3).
+ *
+ * `jomon_ref` is the unique source key: ingestion upserts by it (`INSERT ... ON
+ * DUPLICATE KEY UPDATE` no-op), so re-importing the same request never creates a
+ * duplicate row or a double payout. Combined with the Stripe idempotency key
+ * (`payout:${jomon_ref}`) and the terminal `paid` short-circuit, payouts run at
+ * most once. (payout-execution spec: §取込は jomon_ref で冪等 / §二重送金しない)
+ */
+export const payouts = mysqlTable('payouts', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  // Opaque Jomon transfer-request id. Unique: one payout row per Jomon request.
+  jomonRef: varchar('jomon_ref', { length: 255 }).notNull().unique(),
+  // Resolved payee (`users.id`), or NULL when the payee could not be identified
+  // by `mail_hash` — such rows stay `pending`, are not paid out, and need an
+  // accountant to act. (payout-execution spec: §本人特定（対応表 mail_hash）)
+  userId: varchar('user_id', { length: 36 }).references(() => users.id),
+  // Amount in the currency's smallest unit (Stripe convention; jpy has no minor
+  // unit so this is whole yen). Currency code, e.g. 'jpy'.
+  amount: int('amount').notNull(),
+  currency: varchar('currency', { length: 8 }).notNull(),
+  // Payout state machine: pending → onboarding_waiting (payee onboarding not
+  // done) → processing (execution claimed, transfer in flight) → paid (transfer
+  // succeeded) / failed (transfer failed). `paid` is terminal. `processing` is an
+  // application-level claim: a single ATOMIC conditional UPDATE flips a row to it
+  // before the Stripe transfer, so two concurrent runs cannot both pass the
+  // pre-transfer check and double-pay. (payout-execution spec: §状態機械 / §二重送金しない)
+  status: mysqlEnum('status', ['pending', 'onboarding_waiting', 'processing', 'paid', 'failed'])
+    .notNull()
+    .default('pending'),
+  // Stripe Transfer id, set once the payout succeeds (status `paid`).
+  stripeTransferId: varchar('stripe_transfer_id', { length: 255 }),
+  // When the settled result was successfully written back to Jomon (NULL until
+  // then). Decouples the write-back from the transfer: a transfer can succeed
+  // (`paid`) while the write-back fails, so a `paid` re-run with a NULL value
+  // here re-attempts ONLY the write-back — it never re-transfers. (Codex hardening)
+  jomonWrittenBackAt: timestamp('jomon_written_back_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow().onUpdateNow(),
 })

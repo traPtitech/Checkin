@@ -35,6 +35,31 @@ export async function getUserById(db: Database, id: string): Promise<BillingUser
   return row ?? null
 }
 
+/**
+ * Look up a person row by `mail_hash` WITHOUT creating one. Returns null when no
+ * row matches — payout person-resolution must not invent a payee, so an
+ * unresolved request stays "要対応" (and is not paid out). Distinct from
+ * {@link getOrCreateUserByMailHash}, which is for login. (payout-execution spec:
+ * §本人特定（対応表 mail_hash）)
+ */
+export async function getUserByMailHash(
+  db: Database,
+  mailHash: string,
+): Promise<BillingUserRow | null> {
+  const [row] = await db
+    .select({
+      id: schema.users.id,
+      mailHash: schema.users.mailHash,
+      stripeCustomerId: schema.users.stripeCustomerId,
+      stripeConnectedAccountId: schema.users.stripeConnectedAccountId,
+      payoutOnboardingStatus: schema.users.payoutOnboardingStatus,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.mailHash, mailHash))
+    .limit(1)
+  return row ?? null
+}
+
 /** Fetch a person row by its Connect connected-account id, or null. */
 export async function getUserByConnectedAccountId(
   db: Database,

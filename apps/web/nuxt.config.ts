@@ -35,6 +35,11 @@ export default defineNuxtConfig({
     priceKeizokuStandard: process.env.PRICE_KEIZOKU_STANDARD ?? '',
     priceKeizokuSpecial: process.env.PRICE_KEIZOKU_SPECIAL ?? '',
     invoiceDaysUntilDue: process.env.INVOICE_DAYS_UNTIL_DUE ?? '7',
+    // Payout execution / Jomon integration (OpenSpec: add-payout-execution).
+    jomonApiBaseUrl: process.env.JOMON_API_BASE_URL ?? '',
+    jomonApiToken: process.env.JOMON_API_TOKEN ?? '',
+    jomonApiVersion: process.env.JOMON_API_VERSION ?? 'stub',
+    payoutCurrency: process.env.PAYOUT_CURRENCY ?? 'jpy',
   },
   compatibilityDate: '2025-01-01',
   typescript: {

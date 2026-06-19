@@ -2,6 +2,7 @@ import type { H3Event } from 'h3'
 import {
   type Context,
   createAuthHelpers,
+  createJomonClient,
   createMailer,
   createNotifier,
   createStripeClient,
@@ -73,20 +74,36 @@ export function isCsrfValid(event: H3Event): boolean {
 }
 
 /**
- * Build the per-request oRPC Context: db handle, resolved auth + billing config,
- * mailer + accountant notifier, a lazy Stripe adapter (no SDK is instantiated
- * unless a billing procedure actually uses it, so non-billing requests work even
- * without a Stripe key), the session restored from the cookie, and the
- * CSRF-aware authorization helpers.
+ * Build the per-request oRPC Context: db handle, resolved auth + billing + Jomon
+ * config, mailer + accountant notifier, a lazy Stripe adapter (no SDK is
+ * instantiated unless a billing procedure actually uses it, so non-billing
+ * requests work even without a Stripe key), the Jomon client (`stub` by default,
+ * key-free), the session restored from the cookie, and the CSRF-aware
+ * authorization helpers.
  */
 export async function buildRequestContext(event: H3Event): Promise<Context> {
   const db = useDatabase()
   const config = resolveAuthConfig()
   const billing = resolveBillingConfig()
+  const jomonConfig = resolveJomonConfig()
   const mailer = createMailer(config.mailer)
   const notifier = createNotifier()
   const stripe = createStripeClient(billing.stripeSecretKey)
+  // Lazy: the `stub` driver is key-free; live drivers only validate creds when a
+  // payout procedure actually reaches out to Jomon.
+  const jomon = createJomonClient(jomonConfig)
   const session = await resolveSession(db, getCookie(event, SESSION_COOKIE))
   const helpers = createAuthHelpers(session, isCsrfValid(event))
-  return { db, config, billing, mailer, notifier, stripe, session, ...helpers }
+  return {
+    db,
+    config,
+    billing,
+    jomonConfig,
+    mailer,
+    notifier,
+    stripe,
+    jomon,
+    session,
+    ...helpers,
+  }
 }

@@ -18,6 +18,9 @@ export * from './payouts'
 /** Stripe adapter layer (all Stripe SDK usage is isolated here). */
 export * from './stripe'
 
+/** Jomon integration (pull adapter: interface + stub / v1 / v2 + config + factory). */
+export * from './jomon'
+
 /** Accountant notification abstraction (used by the payment webhook). */
 export * from './notify'
 
