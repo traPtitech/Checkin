@@ -1,0 +1,93 @@
+import { describe, it, expect } from 'vitest'
+import { normalizeEmail, deriveMailHash, safeEqual } from './crypto'
+import { sanitizeRedirect } from './redirect'
+import { isAllowedEmailDomain, isAccountant } from './config'
+import { createAuthHelpers } from './context'
+import type { SessionActor } from './session'
+
+const SECRET = 'test-secret'
+
+describe('crypto: mail_hash', () => {
+  it('normalizes whitespace and case', () => {
+    expect(normalizeEmail('  Foo.Bar@m.isct.ac.jp ')).toBe('foo.bar@m.isct.ac.jp')
+  })
+
+  it('is deterministic and case/whitespace insensitive', () => {
+    const a = deriveMailHash('  Foo.Bar@m.isct.ac.jp ', SECRET)
+    const b = deriveMailHash('foo.bar@m.isct.ac.jp', SECRET)
+    expect(a).toBe(b)
+    expect(a).toMatch(/^[0-9a-f]{64}$/)
+  })
+
+  it('produces different hashes for different emails', () => {
+    expect(deriveMailHash('a@m.isct.ac.jp', SECRET)).not.toBe(deriveMailHash('b@m.isct.ac.jp', SECRET))
+  })
+
+  it('depends on the secret', () => {
+    expect(deriveMailHash('a@m.isct.ac.jp', 'k1')).not.toBe(deriveMailHash('a@m.isct.ac.jp', 'k2'))
+  })
+
+  it('refuses to derive without a secret', () => {
+    expect(() => deriveMailHash('a@m.isct.ac.jp', '')).toThrow()
+  })
+})
+
+describe('crypto: safeEqual', () => {
+  it('matches equal strings and rejects others (incl. length diffs)', () => {
+    expect(safeEqual('abc', 'abc')).toBe(true)
+    expect(safeEqual('abc', 'abd')).toBe(false)
+    expect(safeEqual('abc', 'abcd')).toBe(false)
+  })
+})
+
+describe('redirect: sanitizeRedirect', () => {
+  it('allows same-site absolute paths', () => {
+    expect(sanitizeRedirect('/payments')).toBe('/payments')
+    expect(sanitizeRedirect('/membership?x=1#y')).toBe('/membership?x=1#y')
+  })
+
+  it('falls back for external / protocol-relative / empty', () => {
+    expect(sanitizeRedirect('https://evil.com')).toBe('/')
+    expect(sanitizeRedirect('//evil.com')).toBe('/')
+    expect(sanitizeRedirect('/\\evil.com')).toBe('/')
+    expect(sanitizeRedirect('relative/path')).toBe('/')
+    expect(sanitizeRedirect(undefined)).toBe('/')
+    expect(sanitizeRedirect('', '/home')).toBe('/home')
+  })
+})
+
+describe('config: allow-lists', () => {
+  it('checks email domain case-insensitively', () => {
+    const domains = ['m.isct.ac.jp']
+    expect(isAllowedEmailDomain('a@m.isct.ac.jp', domains)).toBe(true)
+    expect(isAllowedEmailDomain('a@M.ISCT.AC.JP', domains)).toBe(true)
+    expect(isAllowedEmailDomain('a@gmail.com', domains)).toBe(false)
+    expect(isAllowedEmailDomain('not-an-email', domains)).toBe(false)
+  })
+
+  it('checks accountant allow-list', () => {
+    expect(isAccountant('alice', ['alice', 'bob'])).toBe(true)
+    expect(isAccountant('mallory', ['alice', 'bob'])).toBe(false)
+  })
+})
+
+describe('context: auth helpers', () => {
+  const user: SessionActor = { actor: 'user', userId: 'u1', mailHash: 'h1' }
+  const admin: SessionActor = { actor: 'admin', traqId: 'alice' }
+
+  it('requireUser: rejects anonymous, accepts user', () => {
+    expect(() => createAuthHelpers(null, true).requireUser()).toThrow()
+    expect(createAuthHelpers(user, true).requireUser()).toEqual({ userId: 'u1', mailHash: 'h1' })
+  })
+
+  it('requireAdmin: anonymous and plain user are rejected, admin accepted', () => {
+    expect(() => createAuthHelpers(null, true).requireAdmin()).toThrow()
+    expect(() => createAuthHelpers(user, true).requireAdmin()).toThrow()
+    expect(createAuthHelpers(admin, true).requireAdmin()).toEqual({ traqId: 'alice' })
+  })
+
+  it('assertCsrf: throws when invalid, passes when valid', () => {
+    expect(() => createAuthHelpers(user, false).assertCsrf()).toThrow()
+    expect(() => createAuthHelpers(user, true).assertCsrf()).not.toThrow()
+  })
+})

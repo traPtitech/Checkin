@@ -5,8 +5,15 @@
     {
       "idx": 0,
       "version": "5",
-      "when": 1781854772858,
-      "tag": "0000_giant_selene",
+      "when": 1781874606502,
+      "tag": "0000_black_khan",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1781877502412,
+      "tag": "0001_naive_stryfe",
       "breakpoints": true
     }
   ]

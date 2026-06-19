@@ -4,18 +4,16 @@ import { appRouter } from '@checkin/api'
 const handler = new RPCHandler(appRouter)
 
 export default defineEventHandler(async (event) => {
+  // Build the full request context: db handle + resolved auth config/mailer +
+  // the session restored from the session cookie + CSRF-aware authorization
+  // helpers. CSRF is enforced per-procedure via context.assertCsrf() — all oRPC
+  // calls are POST so we cannot gate by HTTP method, and SSR reads such as
+  // health.check / auth.me never call it.
+  const context = await buildRequestContext(event)
+
   const { matched, response } = await handler.handle(toWebRequest(event), {
     prefix: '/rpc',
-    context: {
-      // A single mysql2 pool is created on first use and cached per server
-      // instance (see useDatabase); the pool itself connects lazily. Note that
-      // oRPC reads context.db for *every* request, so DATABASE_URL must be set
-      // even for DB-free procedures like health.check — the getter only defers
-      // creation, it does not make it conditional on the procedure.
-      get db() {
-        return useDatabase()
-      },
-    },
+    context,
   })
 
   if (matched) {

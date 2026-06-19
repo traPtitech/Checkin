@@ -13,14 +13,17 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm -r --parallel typecheck",
+    "test": "vitest run",
     "db:generate": "pnpm --filter @checkin/db db:generate",
     "db:migrate": "pnpm --filter @checkin/db db:migrate",
     "db:push": "pnpm --filter @checkin/db db:push",
     "db:studio": "pnpm --filter @checkin/db db:studio"
   },
   "devDependencies": {
+    "@fission-ai/openspec": "1.4.1",
     "@nuxt/eslint": "^1.16.0",
     "eslint": "^9.39.0",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.0",
+    "vitest": "^2.1.9"
   }
 }
