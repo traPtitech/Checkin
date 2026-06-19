@@ -1,0 +1,25 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# nuxt
+.nuxt
+.output
+.nitro
+.cache
+dist
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editor / os
+.DS_Store
+.idea
+*.tsbuildinfo

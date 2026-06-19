@@ -1,0 +1,26 @@
+{
+  "name": "@checkin/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@checkin/api": "workspace:*",
+    "@checkin/db": "workspace:*",
+    "@orpc/client": "^1.14.0",
+    "@orpc/server": "^1.14.0",
+    "nuxt": "^4.4.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.16.0",
+    "typescript": "^5.9.0",
+    "vue-tsc": "^3.3.0"
+  }
+}

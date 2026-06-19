@@ -1,0 +1,26 @@
+{
+  "name": "checkin",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @checkin/web dev",
+    "build": "pnpm --filter @checkin/web build",
+    "preview": "pnpm --filter @checkin/web preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "db:generate": "pnpm --filter @checkin/db db:generate",
+    "db:migrate": "pnpm --filter @checkin/db db:migrate",
+    "db:push": "pnpm --filter @checkin/db db:push",
+    "db:studio": "pnpm --filter @checkin/db db:studio"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.16.0",
+    "eslint": "^9.39.0",
+    "typescript": "^5.9.0"
+  }
+}
