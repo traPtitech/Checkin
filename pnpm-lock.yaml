@@ -54,9 +54,6 @@ importers:
       '@checkin/db':
         specifier: workspace:*
         version: link:../db
-      '@orpc/client':
-        specifier: ^1.14.0
-        version: 1.14.6
       '@orpc/server':
         specifier: ^1.14.0
         version: 1.14.6(crossws@0.4.6(srvx@0.11.16))(ws@8.21.0)

@@ -28,7 +28,7 @@ Nuxt's Nitro server at `apps/web/server/routes/rpc/[...].ts`, and the typed clie
 
 ```bash
 pnpm install
-cp .env.example .env
+cp .env.example .env        # required — DATABASE_URL must be set before `pnpm dev`
 
 docker compose up -d        # start MariaDB
 pnpm db:migrate             # apply migrations
@@ -36,6 +36,8 @@ pnpm dev                    # Nuxt dev server → http://localhost:3000
 ```
 
 The home page calls the `health.check` oRPC procedure to confirm the front → Nitro → oRPC wiring.
+`health.check` doesn't query the database, but every oRPC request resolves `context.db`, so a
+missing `DATABASE_URL` surfaces as a 500 on the home page — copy `.env` first.
 
 ## Scripts
 

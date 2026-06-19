@@ -7,7 +7,11 @@ export default defineEventHandler(async (event) => {
   const { matched, response } = await handler.handle(toWebRequest(event), {
     prefix: '/rpc',
     context: {
-      // Lazy: only opens a DB connection when a procedure actually reads it.
+      // A single mysql2 pool is created on first use and cached per server
+      // instance (see useDatabase); the pool itself connects lazily. Note that
+      // oRPC reads context.db for *every* request, so DATABASE_URL must be set
+      // even for DB-free procedures like health.check — the getter only defers
+      // creation, it does not make it conditional on the procedure.
       get db() {
         return useDatabase()
       },
