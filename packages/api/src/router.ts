@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ORPCError } from '@orpc/server'
-import { pub } from './orpc'
+import { adminProc, pub, userProc } from './orpc'
 import {
   isAllowedEmailDomain,
   deriveMailHash,
@@ -9,7 +9,15 @@ import {
   getUserById,
 } from './auth'
 import { computeActivityYear, computeTerm, selectPriceId } from './billing'
-import { getOrCreateCustomer, issueInvoice } from './stripe'
+import { getOrCreateCustomer, issueInvoice, listCheckoutSessions, listInvoices } from './stripe'
+import {
+  checkoutSessionToRow,
+  clampLimit,
+  invoiceToRow,
+  modeFromSecretKey,
+  nextCursor,
+  type PaymentPage,
+} from './payments'
 
 /**
  * Application router. Procedures are grouped by capability. Browser-redirect /
@@ -77,7 +85,7 @@ export const appRouter = {
      * others). `new` fees auto-price by the current term; `continuation` uses
      * the standard price. (membership-billing spec: §発行の認可 — 標準は本人)
      */
-    issueInvoice: pub
+    issueInvoice: userProc
       .input(z.object({
         email: z.string().email(),
         name: z.string().min(1),
@@ -138,14 +146,13 @@ export const appRouter = {
      * otherwise creates the Customer from the supplied email (required if none).
      * (membership-billing spec: §発行の認可 — 特別は管理者)
      */
-    issueSpecialInvoice: pub
+    issueSpecialInvoice: adminProc
       .input(z.object({
         userId: z.string().min(1),
         name: z.string().min(1).optional(),
         email: z.string().email().optional(),
       }))
       .handler(async ({ input, context }) => {
-        context.requireAdmin()
         context.assertCsrf()
 
         const row = await getUserById(context.db, input.userId)
@@ -195,6 +202,54 @@ export const appRouter = {
           },
         })
         return result
+      }),
+  },
+
+  payments: {
+    /**
+     * List 請求書由来 (Stripe Invoices) for the accountant. Read-only: requires
+     * admin, but no `assertCsrf` (no state change). Rows are normalized to
+     * Stripe-independent DTOs; `hasMore`/`nextCursor` drive cursor pagination.
+     * (payment-listing spec: §会計のみ / §2 系統 / §フィルタとカーソルページネーション)
+     */
+    listInvoices: adminProc
+      .input(z.object({
+        status: z.enum(['draft', 'open', 'paid', 'uncollectible', 'void']).optional(),
+        limit: z.number().int().optional(),
+        startingAfter: z.string().optional(),
+      }))
+      .handler(async ({ input, context }): Promise<PaymentPage> => {
+        const mode = modeFromSecretKey(context.billing.stripeSecretKey)
+        const page = await listInvoices(context.stripe, {
+          status: input.status,
+          limit: clampLimit(input.limit),
+          startingAfter: input.startingAfter,
+        })
+
+        const items = page.data.map(invoice => invoiceToRow(invoice, mode))
+        return { items, hasMore: page.has_more, nextCursor: nextCursor(items, page.has_more) }
+      }),
+
+    /**
+     * List 決済ページ由来 (Stripe Checkout Sessions) for the accountant. Same
+     * read-only admin authorization and cursor pagination as `listInvoices`.
+     */
+    listCheckoutSessions: adminProc
+      .input(z.object({
+        status: z.enum(['open', 'complete', 'expired']).optional(),
+        limit: z.number().int().optional(),
+        startingAfter: z.string().optional(),
+      }))
+      .handler(async ({ input, context }): Promise<PaymentPage> => {
+        const mode = modeFromSecretKey(context.billing.stripeSecretKey)
+        const page = await listCheckoutSessions(context.stripe, {
+          status: input.status,
+          limit: clampLimit(input.limit),
+          startingAfter: input.startingAfter,
+        })
+
+        const items = page.data.map(session => checkoutSessionToRow(session, mode))
+        return { items, hasMore: page.has_more, nextCursor: nextCursor(items, page.has_more) }
       }),
   },
 }

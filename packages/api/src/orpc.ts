@@ -28,3 +28,23 @@ export interface Context extends AuthHelpers {
 
 /** Base procedure builder — start all procedures from here. */
 export const pub = os.$context<Context>()
+
+/**
+ * Authenticated procedure builder. The auth check runs as oRPC middleware, so it
+ * executes BEFORE `.input()` validation — an unauthenticated caller sending
+ * malformed input gets UNAUTHORIZED, not a zod BAD_REQUEST that would leak the
+ * expected input shape. (session spec: §認可ヘルパ)
+ */
+export const userProc = pub.use(({ context, next }) => {
+  context.requireUser()
+  return next()
+})
+
+/**
+ * Admin (accountant) procedure builder. As with {@link userProc}, the
+ * `requireAdmin()` check runs as middleware ahead of input validation.
+ */
+export const adminProc = pub.use(({ context, next }) => {
+  context.requireAdmin()
+  return next()
+})

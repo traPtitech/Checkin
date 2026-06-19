@@ -9,6 +9,9 @@ export * from './auth'
 /** Membership-collection domain (Stripe-independent: term/pricing/authorize + config). */
 export * from './billing'
 
+/** Payments-listing domain (Stripe-independent: row DTOs / Dashboard URL / pagination). */
+export * from './payments'
+
 /** Stripe adapter layer (all Stripe SDK usage is isolated here). */
 export * from './stripe'
 
