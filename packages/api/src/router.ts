@@ -7,6 +7,7 @@ import {
   sanitizeRedirect,
   createEmailVerification,
   getUserById,
+  linkTraqId,
   setPayoutOnboardingStatus,
 } from './auth'
 import { computeActivityYear, computeTerm, selectPriceId } from './billing'
@@ -81,16 +82,19 @@ export const appRouter = {
         return { ok: true as const }
       }),
 
-    /** Return the current actor (own info only). */
+    /**
+     * Return the current dual identity (own info only). `member` = traQ-authed,
+     * `admin` = accountant, `hasUser` = has a billable isct user linked.
+     */
     me: pub.handler(({ context }) => {
       const session = context.session
-      if (!session) {
-        return { actor: null }
+      return {
+        authenticated: session !== null,
+        member: !!session?.traqId,
+        admin: !!session?.isAdmin,
+        hasUser: !!session?.userId,
+        traqId: session?.traqId ?? null,
       }
-      if (session.actor === 'admin') {
-        return { actor: 'admin' as const, traqId: session.traqId }
-      }
-      return { actor: 'user' as const }
     }),
   },
 
@@ -117,6 +121,25 @@ export const appRouter = {
           throw new ORPCError('FORBIDDEN', { message: 'cannot issue an invoice for another person' })
         }
 
+        // If the caller is also traQ-authenticated, link their authenticated traQ
+        // ID onto this user row (未設定なら保存; 上書きしない). Best-effort: a
+        // conflict (traq_id owned by another user) is logged, never fails the
+        // invoice. We track whether the session traq_id legitimately belongs to
+        // this user (`linked`/`exists`) so we never stamp a conflicting (foreign)
+        // traQ ID into the Customer metadata below.
+        // (membership-billing spec: §支払い時の traQ ID 連結)
+        const traqId = context.session?.traqId ?? null
+        let linkedTraqId: string | null = null
+        if (traqId) {
+          const result = await linkTraqId(context.db, user.userId, traqId)
+          if (result === 'conflict') {
+            console.warn(`linkTraqId conflict on issueInvoice: traqId=${traqId} userId=${user.userId}`)
+          }
+          else {
+            linkedTraqId = traqId
+          }
+        }
+
         // Standard issuance only (special is admin-only via issueSpecialInvoice).
         const now = new Date()
         const term = computeTerm(now)
@@ -137,6 +160,12 @@ export const appRouter = {
           email: input.email,
           name: input.name,
           mailHash: user.mailHash,
+          // Stamp the authenticated traQ ID into Customer metadata when present
+          // (reference keys stay mail_hash / customer_id). Use the session traq_id
+          // ONLY when it legitimately belongs to this user (link result
+          // linked/exists); on conflict it is owned by someone else, so fall back
+          // to the user's already-linked id and never the foreign session traq_id.
+          traqId: linkedTraqId ?? row.traqId ?? undefined,
         })
 
         const activityYear = computeActivityYear(now)

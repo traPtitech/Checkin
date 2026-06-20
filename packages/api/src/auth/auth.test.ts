@@ -3,7 +3,7 @@ import { normalizeEmail, deriveMailHash, safeEqual } from './crypto'
 import { sanitizeRedirect } from './redirect'
 import { isAllowedEmailDomain, isAccountant } from './config'
 import { createAuthHelpers } from './context'
-import type { SessionActor } from './session'
+import type { SessionIdentity } from './session'
 
 const SECRET = 'test-secret'
 
@@ -71,18 +71,35 @@ describe('config: allow-lists', () => {
   })
 })
 
-describe('context: auth helpers', () => {
-  const user: SessionActor = { actor: 'user', userId: 'u1', mailHash: 'h1' }
-  const admin: SessionActor = { actor: 'admin', traqId: 'alice' }
+describe('context: auth helpers (dual identity)', () => {
+  // A plain isct user: userId/mailHash, no traQ, not admin.
+  const user: SessionIdentity = { traqId: null, isAdmin: false, userId: 'u1', mailHash: 'h1' }
+  // A traQ member without a linked user.
+  const member: SessionIdentity = { traqId: 'alice', isAdmin: false, userId: null, mailHash: null }
+  // An accountant (allow-listed traQ ID).
+  const admin: SessionIdentity = { traqId: 'alice', isAdmin: true, userId: null, mailHash: null }
+  // A fully-linked member: both identities present.
+  const linked: SessionIdentity = { traqId: 'bob', isAdmin: false, userId: 'u2', mailHash: 'h2' }
 
-  it('requireUser: rejects anonymous, accepts user', () => {
-    expect(() => createAuthHelpers(null, true).requireUser()).toThrow()
-    expect(createAuthHelpers(user, true).requireUser()).toEqual({ userId: 'u1', mailHash: 'h1' })
+  it('requireMember: rejects anonymous and isct-only user, accepts traQ member', () => {
+    expect(() => createAuthHelpers(null, true).requireMember()).toThrow()
+    expect(() => createAuthHelpers(user, true).requireMember()).toThrow()
+    expect(createAuthHelpers(member, true).requireMember()).toEqual({ traqId: 'alice' })
+    expect(createAuthHelpers(linked, true).requireMember()).toEqual({ traqId: 'bob' })
   })
 
-  it('requireAdmin: anonymous and plain user are rejected, admin accepted', () => {
+  it('requireUser: rejects anonymous and user-less member, accepts a billable user', () => {
+    expect(() => createAuthHelpers(null, true).requireUser()).toThrow()
+    // A traQ member with no linked user cannot issue invoices.
+    expect(() => createAuthHelpers(member, true).requireUser()).toThrow()
+    expect(createAuthHelpers(user, true).requireUser()).toEqual({ userId: 'u1', mailHash: 'h1' })
+    expect(createAuthHelpers(linked, true).requireUser()).toEqual({ userId: 'u2', mailHash: 'h2' })
+  })
+
+  it('requireAdmin: anonymous, plain user and non-admin member are rejected, admin accepted', () => {
     expect(() => createAuthHelpers(null, true).requireAdmin()).toThrow()
     expect(() => createAuthHelpers(user, true).requireAdmin()).toThrow()
+    expect(() => createAuthHelpers(member, true).requireAdmin()).toThrow()
     expect(createAuthHelpers(admin, true).requireAdmin()).toEqual({ traqId: 'alice' })
   })
 

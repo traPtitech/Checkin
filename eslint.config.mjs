@@ -14,8 +14,9 @@ export default withNuxt({
     '.claude/**',
   ],
 }, {
-  // Nuxt pages map to routes, so single-word filenames (index, login, ...) are fine.
-  files: ['apps/web/app/pages/**/*.vue'],
+  // Nuxt pages/layouts map to routes/named layouts, so single-word filenames
+  // (index, login, default, ...) are fine.
+  files: ['apps/web/app/pages/**/*.vue', 'apps/web/app/layouts/**/*.vue'],
   rules: {
     'vue/multi-word-component-names': 'off',
   },

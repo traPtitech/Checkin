@@ -13,9 +13,12 @@
   "dependencies": {
     "@checkin/api": "workspace:*",
     "@checkin/db": "workspace:*",
+    "@nuxt/ui": "^3.3.7",
     "@orpc/client": "^1.14.0",
     "@orpc/server": "^1.14.0",
     "nuxt": "^4.4.0",
+    "tailwindcss": "^4.3.1",
+    "tslib": "^2.8.1",
     "vue": "^3.5.0"
   },
   "devDependencies": {

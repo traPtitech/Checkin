@@ -2,7 +2,7 @@ import { os } from '@orpc/server'
 import type { Database } from '@checkin/db'
 import type { AuthConfig } from './auth/config'
 import type { Mailer } from './auth/mailer'
-import type { SessionActor } from './auth/session'
+import type { SessionIdentity } from './auth/session'
 import type { AuthHelpers } from './auth/context'
 import type { BillingConfig } from './billing/config'
 import type { StripeClient } from './stripe/client'
@@ -28,12 +28,21 @@ export interface Context extends AuthHelpers {
   jomon: JomonClient
   /** Resolved Jomon config (carries the default payout currency). */
   jomonConfig: JomonConfig
-  /** The authenticated actor, or null when unauthenticated. */
-  session: SessionActor | null
+  /** The resolved dual identity (traQ member / isct user / admin), or null. */
+  session: SessionIdentity | null
 }
 
 /** Base procedure builder — start all procedures from here. */
 export const pub = os.$context<Context>()
+
+/**
+ * Member procedure builder — requires a traQ-authenticated session (traqId). As
+ * with the others, the check runs as oRPC middleware ahead of input validation.
+ */
+export const memberProc = pub.use(({ context, next }) => {
+  context.requireMember()
+  return next()
+})
 
 /**
  * Authenticated procedure builder. The auth check runs as oRPC middleware, so it

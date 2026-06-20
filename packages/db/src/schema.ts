@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, timestamp, mysqlEnum, int } from 'drizzle-orm/mysql-core'
+import { mysqlTable, varchar, timestamp, mysqlEnum, int, boolean } from 'drizzle-orm/mysql-core'
 
 /**
  * Auth / identity foundation (OpenSpec change: add-auth-foundation).
@@ -12,6 +12,14 @@ export const users = mysqlTable('users', {
   id: varchar('id', { length: 36 }).primaryKey(),
   // hex HMAC-SHA256 → 64 chars. Unique: one row per person.
   mailHash: varchar('mail_hash', { length: 64 }).notNull().unique(),
+  // Authenticated traQ ID (non-PII secondary key). Added by add-traq-member-auth:
+  // Jomon hands refunds keyed by traQ ID, so we link the authenticated traQ ID
+  // (from an OAuth session, never form input) to this person row to resolve
+  // payouts to a user. Unique: a traQ ID belongs to exactly one person — MariaDB
+  // allows multiple NULLs under a unique index, so nullable + unique fits the
+  // "not yet linked" case and backs the race-safe compare-and-set in
+  // `linkTraqId`. (identity spec: §traQ ID による本人解決と連結)
+  traqId: varchar('traq_id', { length: 255 }).unique(),
   // Stripe Customer reference (non-PII). Added by add-membership-collection: the
   // collection flow does a get-or-create against Stripe and persists the id here
   // so subsequent invoices reuse the same Customer. Plaintext email is still
@@ -39,15 +47,22 @@ export const users = mysqlTable('users', {
 /**
  * Server-side sessions. The opaque session id lives in the `__Host-checkin_session`
  * cookie; only its hash is stored here so a DB leak does not expose live cookies.
- * A session represents exactly one actor: a `user` (isct member, by `user_id`) or
- * an `admin` (accountant, by `traq_id`).
+ *
+ * A session carries a **dual identity** (add-traq-member-auth): it can hold a
+ * traQ identity (`traq_id`, set when logged in via traQ OAuth) and/or an isct
+ * user identity (`user_id`, set when the isct email is confirmed), plus an
+ * `is_admin` accountant flag. The old `actor_type` enum is gone — the principal
+ * is expressed by *which* of `user_id` / `traq_id` / `is_admin` are set.
+ * (session spec: §セッションは利用者・会計のいずれかのアクターを表す)
  */
 export const sessions = mysqlTable('sessions', {
   id: varchar('id', { length: 36 }).primaryKey(),
   idHash: varchar('id_hash', { length: 64 }).notNull().unique(),
-  actorType: mysqlEnum('actor_type', ['user', 'admin']).notNull(),
   userId: varchar('user_id', { length: 36 }).references(() => users.id),
   traqId: varchar('traq_id', { length: 255 }),
+  // Accountant権限フラグ. Granted when the traQ ID is on the env allow-list. A
+  // session can be a member (traqId) without being admin. (admin-authorization spec)
+  isAdmin: boolean('is_admin').notNull().default(false),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })

@@ -1,10 +1,4 @@
-# admin-authorization
-
-## Purpose
-
-traQ OAuth でログインを認証し、**会員セッション**を確立する。会計（管理者）はその traQ ID 許可リスト・サブセット（`isAdmin`）。会計管理は DB の管理者テーブルではなく許可リスト（将来 traQ グループ連携へ拡張可能）で行う。
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: traQ OAuth による会計ログイン
 
@@ -33,17 +27,3 @@ traQ OAuth でログインを認証し、**会員セッション**を確立す�
 
 - **WHEN** 許可リストに含まれない traq_id でログインが完了する
 - **THEN** ログインは成立し会員セッションになるが、会計権限は付与されない
-
-### Requirement: ログインの redirect 保持
-
-`GET /login` は `redirect` クエリを受け取り、OAuth フローを通じて保持 SHALL。ログイン成立後、指定された **同一サイト内** の `redirect` 先へ遷移する MUST。オープンリダイレクトを防ぐため、外部 URL への `redirect` は拒否または無視する SHALL。
-
-#### Scenario: 同一サイトの redirect は保持される
-
-- **WHEN** `GET /login?redirect=/payments` からログインが完了する
-- **THEN** ログイン後に `/payments` へ遷移する
-
-#### Scenario: 外部 redirect は拒否される
-
-- **WHEN** `redirect` に外部 URL（別オリジン）が指定される
-- **THEN** その遷移先は使われず、安全な既定先へ遷移する

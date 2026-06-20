@@ -43,6 +43,13 @@
       "when": 1781884730370,
       "tag": "0005_blushing_blindfold",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1781959782887,
+      "tag": "0006_wild_nemesis",
+      "breakpoints": true
     }
   ]
 }
