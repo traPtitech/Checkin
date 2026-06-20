@@ -1,10 +1,10 @@
 import type { Database } from '@checkin/db'
-import { deriveMailHash } from '../auth/crypto'
-import { getUserById, getUserByMailHash } from '../auth/identity'
+import { getUserById, getUserByTraqId } from '../auth/identity'
 import type { StripeClient } from '../stripe/client'
 import { createAccountOnboardingLink, getOrCreateConnectedAccount } from '../stripe/connect'
 import { createTransfer } from '../stripe/transfers'
-import type { JomonClient, JomonTransferRequest } from '../jomon/types'
+import { JomonWriteBackUnsupportedError } from '../jomon/http'
+import type { JomonClient, JomonTransferRequest, JomonWriteBackResult } from '../jomon/types'
 import { nextPayoutStatus, type PayoutStatus } from './status'
 import {
   claimPayoutForExecution,
@@ -33,8 +33,6 @@ export interface PayoutDeps {
 
 /** Config the orchestration needs (resolved by the host). */
 export interface PayoutExecuteConfig {
-  /** HMAC secret to derive `mail_hash` from a payee email. */
-  mailHashSecret: string
   /** App origin for onboarding refresh/return URLs. */
   appOrigin: string
   /** Default payout currency when a request omits one (e.g. 'jpy'). */
@@ -43,7 +41,7 @@ export interface PayoutExecuteConfig {
 
 /**
  * The outcome of advancing a single payout one step.
- *   - `unresolved`: payee not identified by mail_hash — not paid out, 要対応.
+ *   - `unresolved`: payee not identified by traQ ID — not paid out, 要対応.
  *   - `onboarding_waiting`: onboarding not done — link issued, parked.
  *   - `paid`: transfer succeeded.
  *   - `failed`: transfer attempted but failed.
@@ -89,6 +87,12 @@ export interface ProcessApprovedSummary {
   errored: number
   /** `jomon_ref`s of items that threw, for accountant follow-up. */
   errors: string[]
+  /**
+   * Set when the approved-requests fetch itself failed: the run is reported with
+   * an empty body and this top-level error indicator instead of throwing, so a
+   * Jomon list/HTTP/zod failure never aborts the whole run with nothing recorded.
+   */
+  listError?: string
 }
 
 /**
@@ -102,8 +106,6 @@ export async function processApprovedPayouts(
   deps: PayoutDeps,
   config: PayoutExecuteConfig,
 ): Promise<ProcessApprovedSummary> {
-  const requests = await deps.jomon.listApprovedTransferRequests()
-
   const summary: ProcessApprovedSummary = {
     ingested: 0,
     paid: 0,
@@ -115,6 +117,22 @@ export async function processApprovedPayouts(
     skippedFailed: 0,
     errored: 0,
     errors: [],
+  }
+
+  // Batch-fetch isolation: the approved-requests pull happens BEFORE any per-item
+  // work, so a list/HTTP/zod failure here would otherwise abort the whole run with
+  // nothing recorded. Catch it, log, and RETURN the (empty) summary with a
+  // top-level `listError` so callers/tests see the fetch failed rather than a
+  // throw. No money has moved at this point. (Codex hardening: §batch-abort)
+  let requests: JomonTransferRequest[]
+  try {
+    requests = await deps.jomon.listApprovedTransferRequests()
+  }
+  catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    console.error(`[payout] failed to list approved transfer requests; nothing processed this run: ${reason}`)
+    summary.listError = reason
+    return summary
   }
 
   for (const req of requests) {
@@ -169,7 +187,7 @@ export async function executePayout(
     // Admin single-item path: `execute` MAY retry a `failed` row. (Codex hardening)
     return advancePayout(deps, config, {
       jomonRef: existing.jomonRef,
-      payeeEmail: '',
+      payeeTraqId: '',
       amount: existing.amount,
       currency: existing.currency,
     }, { allowFailedRetry: true })
@@ -238,17 +256,17 @@ async function advancePayout(
     return { jomonRef: req.jomonRef, outcome: 'skipped_failed', status: 'failed' }
   }
 
-  // 2. Identify the payee via the correspondence table (mail_hash). We prefer the
-  //    freshly-pulled email; an empty one (resume without a live request) falls
+  // 2. Identify the payee by their linked traQ ID (`users.traq_id`). We prefer the
+  //    freshly-pulled traQ ID; an empty one (resume without a live request) falls
   //    back to the already-linked userId. Unresolved ⇒ leave userId null, no payout.
-  const user = await resolvePayee(deps, config, req, row)
+  const user = await resolvePayee(deps, req, row)
   if (!user) {
     return { jomonRef: req.jomonRef, outcome: 'unresolved', status: row.status }
   }
 
   // userId is IMMUTABLE once set. If a later run resolves a DIFFERENT user from
-  // the email, do NOT relink — that signals a mail mapping change / mis-route, so
-  // flag for manual review and never transfer. Only set userId when still null.
+  // the traQ ID, do NOT relink — that signals a traQ mapping change / mis-route,
+  // so flag for manual review and never transfer. Only set userId when still null.
   // (Codex hardening: §userId immutability)
   if (row.userId === null) {
     await setPayoutUserId(deps.db, req.jomonRef, user.id)
@@ -331,15 +349,16 @@ async function advancePayout(
   await setPayoutStatus(deps.db, req.jomonRef, status, transferId)
 
   // 5. Write the settled result back to Jomon, then record the write-back so a
-  //    later `paid` re-run does not repeat it. A failure here throws (caught and
-  //    isolated by the batch loop) and leaves jomonWrittenBackAt NULL, so the
-  //    write-back is retried on the next pass WITHOUT re-transferring.
-  await deps.jomon.writeBackResult(req.jomonRef, {
+  //    later `paid` re-run does not repeat it. A write-back failure (including v2
+  //    being unsupported) is isolated: we log a warning, KEEP the payout in its
+  //    settled state, and leave jomonWrittenBackAt NULL so the write-back is
+  //    retried on the next pass WITHOUT re-transferring. (design D3 / spec
+  //    §書き戻し失敗は再試行され、再送金はしない)
+  await tryWriteBack(deps, req.jomonRef, {
     status: transferOk ? 'paid' : 'failed',
     stripeTransferId: transferId,
     message: failureMessage,
   })
-  await setPayoutJomonWrittenBackAt(deps.db, req.jomonRef)
 
   return {
     jomonRef: req.jomonRef,
@@ -350,29 +369,55 @@ async function advancePayout(
 
 /**
  * Re-attempt ONLY the Jomon write-back for an already-`paid` payout whose
- * write-back has not yet been recorded, then mark it done. Never re-transfers.
- * (Codex hardening: §retryable write-back avoids re-transfer)
+ * write-back has not yet been recorded. Never re-transfers. A failure (incl. v2
+ * unsupported) is isolated by {@link tryWriteBack}: it stays unrecorded for a
+ * future retry. (Codex hardening: §retryable write-back avoids re-transfer)
  */
 async function reattemptWriteBack(deps: PayoutDeps, row: PayoutRow): Promise<void> {
-  await deps.jomon.writeBackResult(row.jomonRef, {
+  await tryWriteBack(deps, row.jomonRef, {
     status: 'paid',
     stripeTransferId: row.stripeTransferId ?? undefined,
   })
-  await setPayoutJomonWrittenBackAt(deps.db, row.jomonRef)
 }
 
-/** Resolve the payee for a request: by fresh email, else by the linked userId. */
+/**
+ * Write a settled result back to Jomon and record `jomon_written_back_at` ON
+ * SUCCESS ONLY. A write-back failure — a v2 {@link JomonWriteBackUnsupportedError}
+ * or any transport/validation error — is caught, logged as a warning, and
+ * swallowed: the payout's `paid`/`failed` state is preserved and the timestamp
+ * stays NULL, so a later run retries the write-back ONLY (never re-transfers).
+ * v2 keeps failing until Jomon adds the endpoint, but no double payout occurs.
+ * (design D3 / spec §v2 の書き戻しは未対応として扱う)
+ */
+async function tryWriteBack(
+  deps: PayoutDeps,
+  jomonRef: string,
+  result: JomonWriteBackResult,
+): Promise<void> {
+  try {
+    await deps.jomon.writeBackResult(jomonRef, result)
+    await setPayoutJomonWrittenBackAt(deps.db, jomonRef)
+  }
+  catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    const unsupported = err instanceof JomonWriteBackUnsupportedError
+    console.warn(
+      `[payout] Jomon write-back ${unsupported ? 'unsupported' : 'failed'} for ${jomonRef}; `
+      + `payout stays settled, will retry write-back later: ${reason}`,
+    )
+  }
+}
+
+/** Resolve the payee for a request: by fresh traQ ID, else by the linked userId. */
 async function resolvePayee(
   deps: PayoutDeps,
-  config: PayoutExecuteConfig,
   req: JomonTransferRequest,
   row: PayoutRow,
 ) {
-  if (req.payeeEmail) {
-    const mailHash = deriveMailHash(req.payeeEmail, config.mailHashSecret)
-    return getUserByMailHash(deps.db, mailHash)
+  if (req.payeeTraqId) {
+    return getUserByTraqId(deps.db, req.payeeTraqId)
   }
-  // No email (resume of an existing row): use the already-linked payee if any.
+  // No traQ ID (resume of an existing row): use the already-linked payee if any.
   if (row.userId) {
     return getUserById(deps.db, row.userId)
   }

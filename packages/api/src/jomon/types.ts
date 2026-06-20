@@ -13,19 +13,21 @@
 /**
  * A single approved transfer request, normalized to a Jomon-type-free DTO.
  *
- * The payee is identified by `payeeEmail` (isct email), which the domain
- * resolves to a `users` row via `deriveMailHash`. The real recipient field is
- * unconfirmed against live Jomon and is mapped per driver (design §9, requires
- * Jomon coordination).
+ * The payee is identified by `payeeTraqId` (traQ ID), which the domain resolves
+ * to a `users` row via `getUserByTraqId` (the `users.traq_id` linked at traQ
+ * login). Jomon carries the payee as a traQ ID: v1 exposes it directly
+ * (`repaid_to_user.trap_id`); v2 carries a User UUID (`ApplicationTarget.target`)
+ * which the v2 driver resolves to a traQ username via `GET /api/users`. Currency
+ * is always `'jpy'` (Jomon has no currency concept). (design D1)
  */
 export interface JomonTransferRequest {
   /** Opaque Jomon request id — the unique source/idempotency key. */
   jomonRef: string
-  /** Payee's isct email; resolved to `mail_hash` for person identification. */
-  payeeEmail: string
+  /** Payee's traQ ID; resolved to a `users` row for person identification. */
+  payeeTraqId: string
   /** Amount in the currency's smallest unit (jpy = whole yen). */
   amount: number
-  /** ISO currency code, e.g. 'jpy'. */
+  /** ISO currency code; always `'jpy'` for Jomon. */
   currency: string
 }
 

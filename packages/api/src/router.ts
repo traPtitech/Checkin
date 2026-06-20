@@ -410,11 +410,10 @@ export const appRouter = {
 
 /** Build the payout orchestration config from the request Context. */
 function payoutExecuteConfig(context: {
-  config: { mailHashSecret: string, appOrigin: string }
+  config: { appOrigin: string }
   jomonConfig: { payoutCurrency: string }
 }): PayoutExecuteConfig {
   return {
-    mailHashSecret: context.config.mailHashSecret,
     appOrigin: context.config.appOrigin,
     defaultCurrency: context.jomonConfig.payoutCurrency,
   }

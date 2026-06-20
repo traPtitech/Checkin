@@ -9,10 +9,11 @@ export interface StubWriteBack {
 /**
  * In-memory Jomon driver for dev and tests (functionally complete, no network).
  *
- * Approved requests are served from a seeded in-memory list; `writeBackResult`
- * appends to an in-memory log (and removes the request from the approved list,
- * mirroring Jomon "settling" it so a re-pull doesn't return it again). This lets
- * the whole payout machine run end-to-end without live Jomon. (design D1)
+ * Approved requests (payee = `payeeTraqId`) are served from a seeded in-memory
+ * list; `writeBackResult` appends to an in-memory log (and removes the request
+ * from the approved list, mirroring Jomon "settling" it so a re-pull doesn't
+ * return it again). This lets the whole payout machine run end-to-end without
+ * live Jomon. (design D1)
  */
 export class StubJomonClient implements JomonClient {
   private approved: JomonTransferRequest[]

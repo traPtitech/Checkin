@@ -8,17 +8,27 @@ Jomon で承認済みの振込依頼を取り込み、[[connect-onboarding]] で
 
 ### Requirement: Jomon アダプタ（pull・v1/v2・stub）
 
-システムは、承認済み振込依頼の取得と結果の書き戻しを `JomonClient` アダプタ越しに行う SHALL。実装は環境設定で `stub` / `v1` / `v2` を選択でき、ドメインは具体実装に依存しては SHALL NOT。Checkin→Jomon の認証は Bearer サービストークン（env、片方向）とする MUST。連携は pull とする。
+システムは、承認済み振込依頼の取得と結果の書き戻しを `JomonClient` アダプタ越しに行う SHALL。実装は環境設定で `stub` / `v1` / `v2` を選択でき、ドメインは具体実装に依存しては SHALL NOT。連携は pull とする。実 Jomon API に従い:
+- 承認済みの取得は **`GET /api/applications`**（v1 は `current_state=accepted`、v2 は `status=approved`）。
+- payee は **traQ ID**。v1 は `repaid_to_user.trap_id`（文字列）、v2 は `ApplicationTarget.target`（User UUID）を `GET /api/users` の `User.name` で traQ ユーザー名に解決 MUST。
+- 通貨は持たないため `jpy` 固定とする。
+- 結果の書き戻しは v1 が `PUT /api/applications/{id}/states/repaid/{trapId}`。**v2 は per-payee の書き戻し API が無い**ため、未対応として明示的に失敗（警告ログ）し、Jomon v2 側の追加を待つ MUST（payout のローカル `paid` 状態は保持する）。
+- Checkin→Jomon は Bearer サービストークン（env、片方向）で送る前提とする。ただし現状の Jomon に Bearer 受け口は無く、実接続は Jomon 側の追加が前提（要調整）。
 
 #### Scenario: ドライバを切り替えられる
 
 - **WHEN** `JOMON_API_VERSION` を `stub` / `v1` / `v2` のいずれかに設定する
 - **THEN** 対応する `JomonClient` 実装が使われ、ドメインコードは変更不要
 
-#### Scenario: 取得と書き戻しの両操作を持つ
+#### Scenario: 承認済みを /api/applications から取得
 
-- **WHEN** 払い戻しフローが Jomon と連携する
-- **THEN** 「承認済み振込依頼の取得」と「結果（送金済み/失敗）の書き戻し」が `JomonClient` 経由で行える
+- **WHEN** v1/v2 で承認済み振込依頼を取得する
+- **THEN** `GET /api/applications`（v1 `current_state=accepted` / v2 `status=approved`）から取得し、payee=traQ ID・amount・通貨 jpy を持つ依頼に正規化される
+
+#### Scenario: v2 の書き戻しは未対応として扱う
+
+- **WHEN** v2 ドライバで結果を書き戻そうとする
+- **THEN** 未対応として明示的に失敗（警告ログ）し、payout のローカル `paid` 状態は保持される（Jomon v2 側追加待ち）
 
 ### Requirement: Jomon レスポンスの厳格バリデーション（fail-safe）
 
@@ -38,18 +48,18 @@ Jomon で承認済みの振込依頼を取り込み、[[connect-onboarding]] で
 - **WHEN** 同じ `jomon_ref` の依頼を 2 回取り込む
 - **THEN** `payouts` 行は 1 つのままで、状態は引き継がれる
 
-### Requirement: 本人特定（対応表 mail_hash）と userId 不変
+### Requirement: 本人特定（traQ ID）と userId 不変
 
-システムは、各振込依頼の受取人を対応表（`mail_hash`）で特定 SHALL。特定できない依頼は送金へ進めず要対応として記録する MUST。一度 `user_id` が確定した payout は、後続の取込で別人に解決されても**再リンクしては SHALL NOT**（要対応として扱う。誤送金防止）。
+システムは、各振込依頼の受取人を **traQ ID（`users.traq_id`）** で特定 SHALL。Jomon は受取人を traQ ID で渡すため、`getUserByTraqId` で本人行に解決する（`users.traq_id` は認証済み traQ ログインで連結済みのもの）。特定できない（未連結の traQ ID）依頼は送金へ進めず、要対応として記録する MUST。一度 `user_id` が確定した payout は、後続の取込で別人に解決されても**再リンクしては SHALL NOT**（要対応として扱う。誤送金防止）。
 
-#### Scenario: 特定できたら処理を進める
+#### Scenario: 連結済み traQ ID は処理を進める
 
-- **WHEN** 振込依頼の受取人が `mail_hash` で `users` 行に解決でき、まだ user 未設定
+- **WHEN** 振込依頼の payee traQ ID が `users.traq_id` で本人行に解決でき、まだ user 未設定
 - **THEN** `user_id` を設定し、onboarding 判定／送金へ進む
 
-#### Scenario: 特定できなければ送金しない
+#### Scenario: 未連結 traQ ID は送金しない
 
-- **WHEN** 受取人を `mail_hash` で特定できない
+- **WHEN** payee traQ ID がどの本人行にも連結されていない（`users.traq_id` 無し）
 - **THEN** 送金は行わず、要対応として記録される
 
 #### Scenario: 確定済み userId は変えない
@@ -96,17 +106,17 @@ Jomon で承認済みの振込依頼を取り込み、[[connect-onboarding]] で
 
 ### Requirement: 結果を Jomon に書き戻す（再試行可能・再送金しない）
 
-システムは、送金結果（送金済み / 失敗）を `JomonClient` を通じて Jomon に書き戻す SHALL。書き戻し成否を記録（例: `jomon_written_back_at`）し、送金成功済みだが書き戻し未了の payout は、再実行時に**書き戻しのみ再試行**して送金は再実行しては SHALL NOT。
+システムは、送金結果（送金済み / 失敗）を `JomonClient` を通じて Jomon に書き戻す SHALL。書き戻し成否を記録（`jomon_written_back_at`）し、送金成功済みだが書き戻し未了の payout は、再実行時に**書き戻しのみ再試行**して送金は再実行しては SHALL NOT。v1 は `PUT .../states/repaid/{trapId}` を用いる。**v2 は書き戻し API が無いため未対応として失敗（警告ログ）**し、`jomon_written_back_at` は未設定のまま将来の Jomon 追加に備える（送金の `paid` は確定済みとして保持）。
 
-#### Scenario: 送金済みを書き戻す
+#### Scenario: v1 は送金済みを書き戻す
 
-- **WHEN** payout が `paid` になる
-- **THEN** Jomon に「送金済み」が書き戻され、書き戻し済みが記録される
+- **WHEN** v1 で payout が `paid` になる
+- **THEN** `PUT .../states/repaid/{trapId}` で「送金済み（repaid_at）」が書き戻され、書き戻し済みが記録される
 
 #### Scenario: 書き戻し失敗は再試行され、再送金はしない
 
-- **WHEN** 送金は成功したが Jomon 書き戻しが失敗し、後で再実行する
-- **THEN** 送金は再実行されず、書き戻しのみ再試行される
+- **WHEN** 送金は成功したが Jomon 書き戻しが失敗（v2 未対応含む）し、後で再実行する
+- **THEN** 送金は再実行されず、書き戻しのみ再試行される（v2 は対応追加まで失敗し続けるが二重送金は起きない）
 
 ### Requirement: バッチの個別分離と failed の再試行ポリシー
 
