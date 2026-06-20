@@ -7,11 +7,12 @@
 - **UI 基盤の導入**: `@nuxt/ui` を導入し、共通レイアウト（ヘッダー：サービスロゴ／ログイン時はアイコン）と基本コンポーネント（フォーム・ボタン・通知）を使えるようにする。
 - **`/`（トップ）**: ログイン状態・権限で出し分け。未ログインは「部費を払う」導線＋「会計の方はこちら（traQ ログイン）」、ログイン中はアクター表示＋ログアウト。`auth.me` を参照。
 - **`/verify-email`（isct メール確認）**: isct メールを入力 → `auth.requestEmailVerification` で確認メール送信 → 「確認メールを送信しました」。`redirect` クエリを保持し、確認後に元のページへ戻す。
-- **`/membership`（部費支払い）**: §5.1 の振り分けを**確定済み認証方針（§2）に合わせて整理**する。
-  - 未ログイン（＝isct 未確認）→ `新規入部 / 再入部 / 現役` を選ぶと `/verify-email?redirect=/membership` へ誘導。
-  - ログイン済み（isct 確認済み）→ 請求書フォーム（メール再入力・氏名・区分）→ `membership.issueInvoice` → 発行された支払いページ（`hostedInvoiceUrl`）へ誘導。
+- **`/membership`（部費支払い）**: design §5.1 の振り分けを、[[add-traq-member-auth]] のデュアル・アイデンティティ（`auth.me` の `member`/`hasUser`/`admin`）で実装する。
+  - 未ログイン → `新規入部 / 再入部 / 現役` を選択。`新規入部`・`再入部` → `/verify-email?redirect=...`、`現役` → `/login?redirect=/membership`（traQ ログイン、§5.1）。
+  - traQ 会員だが利用者未連結（`member && !hasUser`）→ isct 確認で連結（`/verify-email?redirect=/membership`）。連結済みなら次回 traQ ログインだけで請求可。
+  - 利用者あり（`hasUser`）→ 請求書フォーム（メール再入力・氏名・区分）→ `membership.issueInvoice` → 支払いページ（`hostedInvoiceUrl`）へ。
   - 区分マッピング: `新規入部`・`再入部` → `feeType: 'new'`（前期/後期で自動価格）、`現役` → `feeType: 'continuation'`（標準）。特別 ¥2,000 は会計のみ（UI 非表示）。
-  - **reconcile**: design §5.1 旧フローの「現役 → traQ ログイン」は、確定方針（利用者＝isct マジックリンク／会計＝traQ、§2）と矛盾するため、**支払い者は全員 isct 確認**に統一。traQ ログインは会計導線として別に出す。
+  - **方針**: [[add-traq-member-auth]] で traQ ログイン＝会員セッションになったため、design §5.1 の「現役 → traQ ログイン」を**そのまま採用**（当初の isct 一本化案は撤回）。
 - 既存スカフォルドの `index.vue`（health 確認用）を上記トップに置き換える。
 
 明確に**スコープ外**（後続）: `/payments`・`/admins`・払い戻し管理などの会計（管理）UI、ステップバー、入部フォーム機能、決済状況のリアルタイム反映。

@@ -1,12 +1,42 @@
 <script setup lang="ts">
-// TODO: rework in add-member-ui — minimal adaptation to the dual-identity auth.me.
-const { data: me } = useAuthMe()
+definePageMeta({ layout: 'default' })
 
+const { data: me } = useAuthMe()
+const { logout } = useCsrf()
+
+// Dual identity (auth.me).
 const authenticated = computed(() => me.value?.authenticated ?? false)
+const member = computed(() => me.value?.member ?? false)
 const isAdmin = computed(() => me.value?.admin ?? false)
+const hasUser = computed(() => me.value?.hasUser ?? false)
 const traqId = computed(() => me.value?.traqId ?? null)
 
-const loginHref = computed(() => `/login?redirect=${encodeURIComponent('/')}`)
+// Accountant (traQ) login is a full-page Nitro route, so use a real <a href>.
+const loginHref = `/login?redirect=${encodeURIComponent('/')}`
+
+const actorTitle = computed(() => {
+  if (isAdmin.value) {
+    return `会計としてログイン中${traqId.value ? `: ${traqId.value}` : ''}`
+  }
+  if (member.value) {
+    return `traQ ログイン中${traqId.value ? `: ${traqId.value}` : ''}`
+  }
+  return 'ログイン中'
+})
+
+const loggingOut = ref(false)
+async function onLogout() {
+  if (loggingOut.value) {
+    return
+  }
+  loggingOut.value = true
+  try {
+    await logout()
+  }
+  finally {
+    loggingOut.value = false
+  }
+}
 </script>
 
 <template>
@@ -43,12 +73,12 @@ const loginHref = computed(() => `/login?redirect=${encodeURIComponent('/')}`)
           variant="link"
           external
         >
-          会計の方はこちら
+          会計／現役の方はログイン
         </UButton>
       </div>
     </section>
 
-    <!-- Logged in: actor display + main links. -->
+    <!-- Logged in: actor (member/admin/hasUser) display + main links + logout. -->
     <section
       v-else
       class="space-y-4"
@@ -57,8 +87,13 @@ const loginHref = computed(() => `/login?redirect=${encodeURIComponent('/')}`)
         color="primary"
         variant="subtle"
         icon="i-lucide-circle-user"
-        :title="isAdmin ? `会計としてログイン中: ${traqId}` : 'ログイン中'"
+        :title="actorTitle"
       />
+      <ul class="text-sm text-muted space-y-1">
+        <li>会員 (traQ): {{ member ? 'はい' : 'いいえ' }}</li>
+        <li>会計: {{ isAdmin ? 'はい' : 'いいえ' }}</li>
+        <li>支払い可能 (利用者連結): {{ hasUser ? 'はい' : 'いいえ' }}</li>
+      </ul>
       <div class="flex flex-wrap items-center gap-3">
         <UButton
           to="/membership"
@@ -67,6 +102,15 @@ const loginHref = computed(() => `/login?redirect=${encodeURIComponent('/')}`)
           icon="i-lucide-credit-card"
         >
           部費を払う
+        </UButton>
+        <UButton
+          color="neutral"
+          variant="subtle"
+          :loading="loggingOut"
+          :disabled="loggingOut"
+          @click="onLogout"
+        >
+          ログアウト
         </UButton>
       </div>
     </section>

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ORPCError } from '@orpc/client'
 
+definePageMeta({ layout: 'default' })
+
 const { $orpc } = useNuxtApp()
 const route = useRoute()
 const toast = useToast()

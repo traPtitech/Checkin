@@ -49,16 +49,32 @@
 
 ### Requirement: 部費支払いの振り分けと発行
 
-`/membership` は、ログイン状態に応じて振り分け SHALL。未ログイン（isct 未確認）では `新規入部 / 再入部 / 現役` の選択を提示し、いずれも `/verify-email?redirect=/membership` へ誘導する MUST。ログイン済み（isct 確認済み）では請求書フォーム（メール・氏名・区分）から `membership.issueInvoice` を呼び、発行された支払いページ（`hostedInvoiceUrl`）へ誘導する MUST。区分は `新規入部`・`再入部` を `new`、`現役` を `continuation` に対応づける。特別 ¥2,000 は会計のみで、利用者 UI には出さない SHALL。
+`/membership` は、`auth.me` のデュアル・アイデンティティ（`member`/`hasUser`/`admin`）に応じて design §5.1 の振り分けを行う SHALL。
 
-#### Scenario: 未ログインは確認へ誘導
+- **未ログイン**では `新規入部 / 再入部 / 現役` の選択を提示する。`新規入部`・`再入部` は `/verify-email?redirect=...` へ、`現役` は `/login?redirect=/membership`（traQ ログイン）へ誘導する MUST（§5.1）。
+- **traQ 会員だが利用者未連結（`member && !hasUser`）**では、isct メール確認で連結するよう `/verify-email?redirect=/membership` へ誘導する MUST。
+- **利用者あり（`hasUser`）**では請求書フォーム（メール・氏名・区分）から `membership.issueInvoice` を呼び、発行された支払いページ（`hostedInvoiceUrl`）へ誘導する MUST。
 
-- **WHEN** 未ログインで `/membership` を開き区分を選ぶ
+区分は `新規入部`・`再入部` を `new`、`現役` を `continuation` に対応づける。特別 ¥2,000 は会計のみで、利用者 UI には出さない SHALL。
+
+#### Scenario: 未ログインの新規/再入部は確認へ
+
+- **WHEN** 未ログインで `新規入部` または `再入部` を選ぶ
 - **THEN** `/verify-email?redirect=/membership` へ誘導される
 
-#### Scenario: ログイン済みは請求書を発行できる
+#### Scenario: 未ログインの現役は traQ ログインへ
 
-- **WHEN** ログイン済み利用者がメール・氏名・区分を入力して発行する
+- **WHEN** 未ログインで `現役` を選ぶ
+- **THEN** `/login?redirect=/membership`（traQ ログイン）へ誘導される
+
+#### Scenario: 会員だが未連結は確認へ
+
+- **WHEN** traQ ログイン済みだが利用者未連結（`member && !hasUser`）で `/membership` を開く
+- **THEN** isct 確認で連結するよう `/verify-email?redirect=/membership` へ誘導される
+
+#### Scenario: 利用者ありは請求書を発行できる
+
+- **WHEN** `hasUser` の利用者がメール・氏名・区分を入力して発行する
 - **THEN** `membership.issueInvoice` が呼ばれ、成功時は支払いページ（`hostedInvoiceUrl`）への導線が表示される
 
 #### Scenario: 区分が価格種別に対応する

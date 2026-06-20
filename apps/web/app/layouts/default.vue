@@ -1,10 +1,10 @@
 <script setup lang="ts">
 const route = useRoute()
-// TODO: rework in add-member-ui — minimal adaptation to the dual-identity auth.me.
 const { data: me } = useAuthMe()
 const { logout } = useCsrf()
 
 const authenticated = computed(() => me.value?.authenticated ?? false)
+const member = computed(() => me.value?.member ?? false)
 const isAdmin = computed(() => me.value?.admin ?? false)
 const traqId = computed(() => me.value?.traqId ?? null)
 
@@ -42,6 +42,7 @@ async function onLogout() {
           <template v-if="authenticated">
             <span class="text-muted">
               <template v-if="isAdmin">会計: {{ traqId }}</template>
+              <template v-else-if="member">{{ traqId }}</template>
               <template v-else>ログイン中</template>
             </span>
             <UButton
@@ -71,7 +72,7 @@ async function onLogout() {
               size="sm"
               external
             >
-              会計の方はこちら
+              会計／現役の方はログイン
             </UButton>
           </template>
         </nav>

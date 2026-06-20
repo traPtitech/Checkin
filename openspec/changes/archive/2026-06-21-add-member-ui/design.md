@@ -2,7 +2,7 @@
 
 バックエンド（[[add-auth-foundation]] / [[add-membership-collection]]）は揃ったが UI が無い。利用者向けの最小フロー（トップ／isct メール確認／部費支払い）を `@nuxt/ui` で実装し、集金をエンドツーエンドで使えるようにする。会計（管理）UI は後続。
 
-確定済み前提（§2 認証方針）: 利用者＝isct マジックリンク、会計＝traQ OAuth。よって **支払い者は全員 isct 確認**で統一し、design §5.1 旧フローの「現役→traQ」は採らない（reconcile）。
+前提（[[add-traq-member-auth]] 反映後）: traQ ログイン＝**会員セッション**、会計は許可リスト・サブセット。`auth.me` は `{ authenticated, member, admin, hasUser, traqId }` を返す。よって design §5.1 の「現役→traQ ログイン」を**そのまま採用**し、未連結会員は isct 確認で連結する。
 
 既存サーバ機能（UI から使う）:
 - oRPC: `auth.me`（`{actor:null|'user'|'admin', traqId?}`）、`auth.requestEmailVerification({email, redirect?})`、`membership.issueInvoice({email,name,feeType})`→`{invoiceId, hostedInvoiceUrl}`。
@@ -47,14 +47,17 @@
 - `UInput`（email）＋`UButton`。送信で `auth.requestEmailVerification({ email, redirect })`（`redirect` は `route.query.redirect` を sanitize して付与）。
 - 成功: 「確認メールを送信しました。メール内のリンクから続行してください」をトースト/`UAlert`。失敗（ドメイン外等）はエラー表示。二重送信防止（送信中は disabled）。
 
-### D6. `/membership`（`app/pages/membership.vue`）
+### D6. `/membership`（`app/pages/membership.vue`）— §5.1 デュアル振り分け
 
-- `auth.me` を取得。
-- 未ログイン（`actor !== 'user'`）: `新規入部 / 再入部 / 現役` の選択（`UButton`/カード）。いずれも `navigateTo('/verify-email?redirect=' + encodeURIComponent('/membership?type=' + sel))`（選択を type クエリで持ち越し）。
-- ログイン済み（`actor==='user'`）: 請求書フォーム（`email`・`name`・`区分`セレクト。`type` クエリがあれば区分を初期選択）。送信で区分→feeType（`新規入部`/`再入部`→`new`、`現役`→`continuation`）に変換し `membership.issueInvoice`。
-  - 成功: `hostedInvoiceUrl` への「支払いページへ進む」ボタン（`<a target>` or `navigateTo(url, {external:true})`）。
+- `auth.me`（`{ authenticated, member, admin, hasUser, traqId }`）を取得。
+- **未ログイン**（`!authenticated`）: `新規入部 / 再入部 / 現役` の選択（`UButton`/カード）。
+  - `新規入部`・`再入部` → `navigateTo('/verify-email?redirect=' + encodeURIComponent('/membership?type=' + sel))`。
+  - `現役` → `navigateTo('/login?redirect=/membership', { external: true })`（traQ ログイン Nitro ルート）。
+- **会員だが未連結**（`member && !hasUser`）: 「isct メール確認で連結してください」案内＋`/verify-email?redirect=/membership` 導線。
+- **利用者あり**（`hasUser`）: 請求書フォーム（`email`・`name`・`区分`セレクト。`type` クエリがあれば区分初期選択）。送信で区分→feeType（`新規入部`/`再入部`→`new`、`現役`→`continuation`）に変換し `membership.issueInvoice`。
+  - 成功: `hostedInvoiceUrl` への「支払いページへ進む」ボタン（`navigateTo(url, { external: true })`）。
   - 失敗: エラー表示（例: メール不一致＝「確認したメールと一致しません」、その他＝汎用）。送信中 disabled。
-- 注: ログイン中はセッションに `mailHash` のみ保持しメール平文は持たないため、フォームでメールを再入力させ、サーバが `mail_hash` 一致を検証する（既存仕様）。
+- 注: セッションは `mailHash` のみ保持しメール平文は持たないため、フォームでメールを再入力させ、サーバが `mail_hash` 一致を検証する（既存仕様）。`hasUser` の利用者が traQ 会員でもあれば、発行時に traq_id が連結される（[[add-traq-member-auth]]）。
 
 ### D7. 型安全な oRPC 呼び出し
 
@@ -64,7 +67,7 @@
 
 - **@nuxt/ui / Tailwind v4 と既存 ESLint(stylistic) の相性** → Mitigation: 生成物を lint:fix で整え、必要なら .vue の stylistic 設定を確認。ビルド/型チェックをグリーンに保つ。
 - **Stripe キー未投入で issueInvoice が失敗** → Mitigation: UI はエラーを表示。verify-email フロー（LogMailer）と分岐は鍵なしでも確認可能。
-- **§5.1 旧フローとの差異（現役の traQ ログイン廃止）** → Mitigation: §2 準拠として proposal/design に明記。会計導線は別に提供。SSR の `auth.me` は cookie 転送済み（既存プラグイン）で機能。
+- **現役の traQ ログイン導線** → [[add-traq-member-auth]] で traQ ログイン＝会員セッションになったため、design §5.1 の「現役→traQ ログイン」をそのまま採用。会計導線も同じ traQ ログイン（許可リストで isAdmin 判定）。SSR の `auth.me` は cookie 転送済み（既存プラグイン）で機能。
 
 ## Migration Plan
 
