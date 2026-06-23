@@ -36,6 +36,22 @@ export async function createDraftInvoice(stripe: StripeClient, input: CreateDraf
     collection_method: 'send_invoice',
     days_until_due: input.daysUntilDue,
     metadata: input.metadata,
+    // Offer card AND bank transfer (口座振込) on the hosted invoice page. Bank
+    // transfer settles asynchronously: Stripe shows a dedicated virtual account,
+    // the payer transfers, the funds land in the Customer cash balance and
+    // auto-apply to this invoice, then `invoice.paid` fires exactly like a card
+    // payment. So this only adds a payment *method* — the draft-first issuance
+    // order and the webhook/ledger paid-confirmation path are unchanged.
+    // (membership-billing: §請求書の作成・確定・送付)
+    payment_settings: {
+      payment_method_types: ['card', 'customer_balance'],
+      payment_method_options: {
+        customer_balance: {
+          bank_transfer: { type: 'jp_bank_transfer' },
+          funding_type: 'bank_transfer',
+        },
+      },
+    },
   })
   if (!draft.id) {
     throw new Error('Stripe did not return an invoice id')

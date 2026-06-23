@@ -9,7 +9,7 @@ traP の Stripe 集金・払い戻しシステム「Checkin」。design.md（リ
 第一弾スコープ（①集金 ②入出金一覧 ③払い戻し）＋認証基盤＋利用者 UI＋会計 UI＋**重複支払い防止（発行台帳）**を **OpenSpec 仕様駆動**で実装済み。
 
 - **全ゲート緑**: `pnpm lint` / `pnpm typecheck` / `pnpm build` / `pnpm test`（120 tests）。
-- **10 changes をアーカイブ済み**（`openspec/changes/archive/`）、**13 specs**（`openspec/specs/`）。
+- **11 changes をアーカイブ済み**（`openspec/changes/archive/`）、**13 specs**（`openspec/specs/`）。
 - **未コミット差分あり**（`add-accountant-ui` ＋ `add-issuance-ledger` ＋ dev 環境）。**push / PR は未実施**。
 - 直近: `add-issuance-ledger`（半期スロット台帳で会員費の二重払いを拒否）。**実 Stripe で E2E 済み**（発行→支払い→再発行拒否／未払い時 URL 再利用／通期×半期の重複拒否）。Codex 2 周レビューで money-safety（draft-first 順序）を確定。
 - **ローカル dev 構成あり**（下記 §10）: `.env`＋`apps/web/.env` symlink、Dev ログイン `/dev/login`、Stripe test キー＋4 Price＋`stripe listen` 配線済み。
@@ -53,7 +53,7 @@ traP の Stripe 集金・払い戻しシステム「Checkin」。design.md（リ
 | session | add-auth-foundation (+traq) | **デュアル・アイデンティティ**: `{ traqId, isAdmin, userId, mailHash }`。`__Host-` cookie＋double-submit CSRF。`requireMember/User/Admin` |
 | admin-authorization | add-auth-foundation (+traq) | traQ OAuth(PKCE)=**会員セッション**。会計は env 許可リスト・サブセット（`isAdmin`） |
 | stripe-customer | add-membership-collection | Customer get-or-create（DB→検索→作成、競合安全）。アダプタ境界 |
-| membership-billing | add-membership-collection (+traq) | 期判定（前期4-9/後期10-3、活動年度4/1-3/31）→ price 選択。`issueInvoice`(本人=mail_hash一致) / `issueSpecialInvoice`(会計のみ ¥2,000)。支払い時に traq_id 連結 |
+| membership-billing | add-membership-collection (+traq, +bank-transfer) | 期判定（前期4-9/後期10-3、活動年度4/1-3/31）→ price 選択。`issueInvoice`(本人=mail_hash一致) / `issueSpecialInvoice`(会計のみ ¥2,000)。支払い時に traq_id 連結。**請求書はカード＋口座振込（`customer_balance`/`jp_bank_transfer`）両対応**（`add-bank-transfer-payment`、`createDraftInvoice` の `payment_settings`。着金は非同期で `invoice.paid` 経路に合流） |
 | payment-webhook | add-membership-collection | `invoice.paid` 署名検証＋event 冪等＋会計通知（Notifier） |
 | payment-listing | add-payment-listing | 会計のみ `payments.listInvoices`/`listCheckoutSessions`（Stripe 由来、カーソル、Dashboard URL） |
 | connect-onboarding | add-connect-onboarding | Connect connected account JIT onboarding。`account.updated` でフラグ判定 → `payout_onboarding_status`(none/requested/done) |
@@ -141,7 +141,7 @@ pnpm test                           # vitest（DB バックドテストは Maria
 2. Stripe/Connect の test キーが入ったら各 BLOCKED E2E を消化（残作業 B）。会計 UI（`/payments`・`/payouts`）も実データで E2E（`add-accountant-ui` の tasks 4.3/4.4）。
 3. `stripe_customer_id` unique 化（残作業 D）。
 4. （任意）特別請求書発行 UI（会計が `coverage`/`activityYear` 指定）＋ user 検索 API（残作業 C の残り）。
-5. （任意）銀行振込（`customer_balance`/`jp_bank_transfer`、請求書ごとに付与）＝別 change。
+5. ~~（任意）銀行振込（`customer_balance`/`jp_bank_transfer`）~~ → **完了**（`add-bank-transfer-payment`、全請求書をカード＋口座振込の両対応に）。残: Stripe アカウントで JPY＋日本の銀行振込を有効化のうえ test mode E2E（archive の tasks 4.x が BLOCKED）。
 
 ## 10. ローカル dev 環境（このセッションで構築・未コミット）
 
