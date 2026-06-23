@@ -113,6 +113,34 @@ async function onLogout() {
           ログアウト
         </UButton>
       </div>
+
+      <!-- Accountant-only links (server adminProc is the real authz). -->
+      <div
+        v-if="isAdmin"
+        class="space-y-2"
+      >
+        <h2 class="text-sm font-semibold text-highlighted">
+          会計メニュー
+        </h2>
+        <div class="flex flex-wrap items-center gap-3">
+          <UButton
+            to="/payments"
+            color="neutral"
+            variant="subtle"
+            icon="i-lucide-receipt"
+          >
+            入出金一覧
+          </UButton>
+          <UButton
+            to="/payouts"
+            color="neutral"
+            variant="subtle"
+            icon="i-lucide-banknote"
+          >
+            払い戻し管理
+          </UButton>
+        </div>
+      </div>
     </section>
   </div>
 </template>

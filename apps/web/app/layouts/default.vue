@@ -40,6 +40,25 @@ async function onLogout() {
 
         <nav class="flex items-center gap-3 text-sm">
           <template v-if="authenticated">
+            <!-- Accountant-only links (server adminProc is the real authz). -->
+            <template v-if="isAdmin">
+              <UButton
+                to="/payments"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+              >
+                入出金
+              </UButton>
+              <UButton
+                to="/payouts"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+              >
+                払い戻し
+              </UButton>
+            </template>
             <span class="text-muted">
               <template v-if="isAdmin">会計: {{ traqId }}</template>
               <template v-else-if="member">{{ traqId }}</template>
