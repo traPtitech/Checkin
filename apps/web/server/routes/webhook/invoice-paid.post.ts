@@ -1,4 +1,4 @@
-import { constructEvent, createNotifier, createStripeClient, hasProcessedStripeEvent, recordStripeEventOnce } from '@checkin/api'
+import { constructEvent, createNotifier, createStripeClient, hasProcessedStripeEvent, markPaidByInvoiceId, recordStripeEventOnce } from '@checkin/api'
 
 /**
  * POST /webhook/invoice-paid — Stripe `invoice.paid` receiver.
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   const rawBody = await readRawBody(event, false)
   const signature = getHeader(event, 'stripe-signature')
 
-  let verified: { id: string, type: string }
+  let verified: { id: string, type: string, objectId: string | null }
   try {
     if (!rawBody) {
       throw new Error('missing request body')
@@ -43,6 +43,14 @@ export default defineEventHandler(async (event) => {
   const db = useDatabase()
   if (await hasProcessedStripeEvent(db, verified.id)) {
     return { ok: true, duplicate: true }
+  }
+
+  // Confirm the issuance ledger: flip the paid invoice's half-slots to `paid`.
+  // Idempotent and independent of the accountant notification — a 台帳外 invoice
+  // (no slots) is a no-op. Do this before notify/record so a failure here leaves
+  // the event unrecorded and Stripe retries. (issuance-ledger spec: §入金時の paid 確定)
+  if (verified.objectId) {
+    await markPaidByInvoiceId(db, verified.objectId)
   }
 
   // Notify FIRST, then record. A notify failure throws before recordStripeEventOnce

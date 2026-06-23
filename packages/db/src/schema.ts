@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, timestamp, mysqlEnum, int, boolean } from 'drizzle-orm/mysql-core'
+import { mysqlTable, varchar, timestamp, mysqlEnum, int, boolean, unique } from 'drizzle-orm/mysql-core'
 
 /**
  * Auth / identity foundation (OpenSpec change: add-auth-foundation).
@@ -138,3 +138,40 @@ export const payouts = mysqlTable('payouts', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow().onUpdateNow(),
 })
+
+/**
+ * Membership issuance/payment ledger — half-period slots (OpenSpec change:
+ * add-issuance-ledger). Prevents paying twice for the same membership coverage.
+ *
+ * One row = one occupied half-slot of an activity year for a person. The UNIQUE
+ * `(user_id, activity_year, half)` is the duplicate-payment guard: a person can
+ * hold at most one slot per (year, half). A 通期 issuance occupies BOTH halves
+ * (two rows sharing `charge_group` + `stripe_invoice_id`); a 半期 issuance one.
+ *
+ * `activity_year` is the year the payment COVERS (継続 collected in 後期 covers
+ * next year), not the issuance time. coverage: ¥4,000=通期 (both halves),
+ * ¥2,000=one half. Issuance reserves the slot(s) `open` before the Stripe call,
+ * writes back `stripe_invoice_id` on success, and frees them (DELETE) on
+ * void/failure. `invoice.paid` flips the charge's slots to `paid`. (issuance-ledger spec)
+ */
+export const membershipSlots = mysqlTable('membership_slots', {
+  id: varchar('id', { length: 36 }).primaryKey(),
+  userId: varchar('user_id', { length: 36 }).notNull().references(() => users.id),
+  // Activity year the payment covers (4/1–3/31). 継続 in 後期 covers year+1.
+  activityYear: int('activity_year').notNull(),
+  // Which half of the year this slot covers.
+  half: mysqlEnum('half', ['zenki', 'kouki']).notNull(),
+  // Groups the 1–2 half-slots of a single issuance (通期 = two rows share this).
+  chargeGroup: varchar('charge_group', { length: 36 }).notNull(),
+  // Stripe Invoice id; NULL between reservation and successful Stripe issuance.
+  stripeInvoiceId: varchar('stripe_invoice_id', { length: 255 }),
+  // Slot lifecycle: open (reserved/issued) → paid. void/failure = row DELETED
+  // (frees the half), so two states suffice and stay compatible with the UNIQUE.
+  status: mysqlEnum('status', ['open', 'paid']).notNull().default('open'),
+  paidAt: timestamp('paid_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow().onUpdateNow(),
+}, table => [
+  // The duplicate-payment guard: at most one slot per person/year/half.
+  unique('membership_slots_user_year_half_uq').on(table.userId, table.activityYear, table.half),
+])

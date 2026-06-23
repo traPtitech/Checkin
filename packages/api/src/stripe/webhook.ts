@@ -5,6 +5,8 @@ import type { StripeClient } from './client'
 export interface VerifiedEvent {
   id: string
   type: string
+  /** The id of the event's data object (e.g. the Invoice id for `invoice.paid`), or null. */
+  objectId: string | null
 }
 
 /**
@@ -26,5 +28,6 @@ export function constructEvent(
     throw new Error('STRIPE_WEBHOOK_SECRET is not set; refusing to verify webhook')
   }
   const event: Stripe.Event = stripe.sdk.webhooks.constructEvent(rawBody, signature, webhookSecret)
-  return { id: event.id, type: event.type }
+  const object = event.data?.object as { id?: string } | undefined
+  return { id: event.id, type: event.type, objectId: object?.id ?? null }
 }

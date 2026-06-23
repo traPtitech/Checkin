@@ -27,5 +27,8 @@ export * from './notify'
 /** Webhook idempotency ledger helpers. */
 export * from './webhook'
 
+/** Membership issuance/payment ledger (half-period slots, duplicate-payment guard). */
+export * from './ledger'
+
 /** Type of the application router — import this (type-only) on the client. */
 export type AppRouter = typeof appRouter

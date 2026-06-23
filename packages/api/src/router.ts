@@ -13,12 +13,20 @@ import {
 import { computeActivityYear, computeTerm, selectPriceId } from './billing'
 import {
   createAccountOnboardingLink,
+  createDraftInvoice,
+  finalizeAndSendInvoice,
   getOrCreateConnectedAccount,
   getOrCreateCustomer,
-  issueInvoice,
   listCheckoutSessions,
   listInvoices,
+  voidInvoiceSafe,
 } from './stripe'
+import {
+  halvesForCoverage,
+  issueWithLedger,
+  standardActivityYear,
+  standardCoverage,
+} from './ledger'
 import {
   executePayout,
   listPayouts,
@@ -149,40 +157,59 @@ export const appRouter = {
           variant: 'standard',
         })
 
-        // Resolve the Customer (DB → Stripe search → create) and persist its id.
-        const row = await getUserById(context.db, user.userId)
-        if (!row) {
-          throw new ORPCError('NOT_FOUND', { message: 'user not found' })
-        }
-        const customerId = await getOrCreateCustomer(context.stripe, context.db, {
-          userId: row.id,
-          stripeCustomerId: row.stripeCustomerId,
-          email: input.email,
-          name: input.name,
-          mailHash: user.mailHash,
-          // Stamp the authenticated traQ ID into Customer metadata when present
-          // (reference keys stay mail_hash / customer_id). Use the session traq_id
-          // ONLY when it legitimately belongs to this user (link result
-          // linked/exists); on conflict it is owned by someone else, so fall back
-          // to the user's already-linked id and never the foreign session traq_id.
-          traqId: linkedTraqId ?? row.traqId ?? undefined,
-        })
-
-        const activityYear = computeActivityYear(now)
-        const result = await issueInvoice(context.stripe, {
-          customerId,
-          priceId,
-          daysUntilDue: context.billing.invoiceDaysUntilDue,
-          // Deterministic key so a rapid double-submit dedupes within Stripe's
-          // idempotency window (not a cross-time issuance ledger — see design Risks).
-          idempotencyKey: `inv:${customerId}:${priceId}:${activityYear}:${input.feeType}:standard`,
-          metadata: {
-            fee_type: input.feeType,
-            term,
-            activity_year: String(activityYear),
+        // Ledger gate (issuance-ledger): determine the half-period(s) this payment
+        // covers and the activity year it covers (継続 → 翌年度), then issue through
+        // the ledger so a payable invoice never exists without a slot guard. The
+        // Customer is resolved lazily inside `createDraft` (only on the `free`
+        // path), so a rejected duplicate creates no Customer/invoice side effects.
+        const coverage = standardCoverage(input.feeType, term)
+        const activityYear = standardActivityYear(now, input.feeType)
+        const outcome = await issueWithLedger(
+          context.db,
+          { userId: user.userId, activityYear, halves: halvesForCoverage(coverage) },
+          {
+            createDraft: async () => {
+              const row = await getUserById(context.db, user.userId)
+              if (!row) {
+                throw new ORPCError('NOT_FOUND', { message: 'user not found' })
+              }
+              const customerId = await getOrCreateCustomer(context.stripe, context.db, {
+                userId: row.id,
+                stripeCustomerId: row.stripeCustomerId,
+                email: input.email,
+                name: input.name,
+                mailHash: user.mailHash,
+                // Stamp the authenticated traQ ID into Customer metadata when present
+                // (reference keys stay mail_hash / customer_id). Use the session traq_id
+                // ONLY when it legitimately belongs to this user (link result
+                // linked/exists); on conflict it is owned by someone else, so fall back
+                // to the user's already-linked id and never the foreign session traq_id.
+                traqId: linkedTraqId ?? row.traqId ?? undefined,
+              })
+              const { invoiceId } = await createDraftInvoice(context.stripe, {
+                customerId,
+                priceId,
+                daysUntilDue: context.billing.invoiceDaysUntilDue,
+                metadata: {
+                  fee_type: input.feeType,
+                  term,
+                  activity_year: String(activityYear),
+                },
+              })
+              return invoiceId
+            },
+            finalizeAndSend: id => finalizeAndSendInvoice(context.stripe, id),
+            voidInvoice: id => voidInvoiceSafe(context.stripe, id),
           },
-        })
-        return result
+        )
+        if (!outcome.ok) {
+          throw new ORPCError('CONFLICT', {
+            message: outcome.rejected === 'paid'
+              ? '対象の期間は既に支払い済みです。'
+              : '支払い対象の期間が既存の請求と重複しています。',
+          })
+        }
+        return { invoiceId: outcome.invoiceId, hostedInvoiceUrl: outcome.hostedInvoiceUrl }
       }),
 
     /**
@@ -196,6 +223,12 @@ export const appRouter = {
         userId: z.string().min(1),
         name: z.string().min(1).optional(),
         email: z.string().email().optional(),
+        // Special (¥2,000) always covers a SINGLE half — the accountant picks
+        // which (前期のみ＝zenki / 後期追加＝kouki). 通期 is not a special option.
+        coverage: z.enum(['zenki', 'kouki']),
+        // Activity year this payment covers; defaults to the current year. Pass
+        // the next year for a 継続特別 collected in 後期. (issuance-ledger spec)
+        activityYear: z.number().int().optional(),
       }))
       .handler(async ({ input, context }) => {
         context.assertCsrf()
@@ -205,48 +238,67 @@ export const appRouter = {
           throw new ORPCError('NOT_FOUND', { message: 'target user not found' })
         }
 
-        // Reuse the linked Customer; otherwise an email is required to create one.
-        if (!row.stripeCustomerId && !input.email) {
-          throw new ORPCError('BAD_REQUEST', {
-            message: 'email is required to create a Stripe Customer for this user',
+        // Ledger gate (issuance-ledger): reserve the single target half through the
+        // ledger so a payable invoice never exists without a guard. Customer
+        // resolution + email validation happen lazily in `createDraft` (only on
+        // the `free` path), so a rejected duplicate has no side effects.
+        const now = new Date()
+        const activityYear = input.activityYear ?? computeActivityYear(now)
+        const outcome = await issueWithLedger(
+          context.db,
+          { userId: row.id, activityYear, halves: halvesForCoverage(input.coverage) },
+          {
+            createDraft: async () => {
+              // Reuse the linked Customer; otherwise an email is required to create one.
+              if (!row.stripeCustomerId && !input.email) {
+                throw new ORPCError('BAD_REQUEST', {
+                  message: 'email is required to create a Stripe Customer for this user',
+                })
+              }
+              // When we will create a Customer from the supplied email, the email must
+              // belong to the target user (mail_hash match). Otherwise we would
+              // permanently link the user row to the wrong email/Customer.
+              if (!row.stripeCustomerId && input.email
+                && deriveMailHash(input.email, context.config.mailHashSecret) !== row.mailHash) {
+                throw new ORPCError('BAD_REQUEST', { message: 'email does not match the target user' })
+              }
+              const customerId = await getOrCreateCustomer(context.stripe, context.db, {
+                userId: row.id,
+                stripeCustomerId: row.stripeCustomerId,
+                // email is only used when no Customer exists yet (guarded above).
+                email: input.email ?? '',
+                name: input.name,
+                mailHash: row.mailHash,
+              })
+              const priceId = selectPriceId(context.billing, {
+                feeType: 'continuation',
+                variant: 'special',
+              })
+              const { invoiceId } = await createDraftInvoice(context.stripe, {
+                customerId,
+                priceId,
+                daysUntilDue: context.billing.invoiceDaysUntilDue,
+                metadata: {
+                  fee_type: 'continuation',
+                  variant: 'special',
+                  coverage: input.coverage,
+                  activity_year: String(activityYear),
+                },
+              })
+              return invoiceId
+            },
+            finalizeAndSend: id => finalizeAndSendInvoice(context.stripe, id),
+            voidInvoice: id => voidInvoiceSafe(context.stripe, id),
+          },
+        )
+        if (!outcome.ok) {
+          throw new ORPCError('CONFLICT', {
+            message: outcome.rejected === 'paid'
+              ? '対象の期間は既に支払い済みです。'
+              : '支払い対象の期間が既存の請求と重複しています。',
           })
         }
-        // When we will create a Customer from the supplied email, the email must
-        // belong to the target user (mail_hash match). Otherwise we would
-        // permanently link the user row to the wrong email/Customer.
-        if (!row.stripeCustomerId && input.email
-          && deriveMailHash(input.email, context.config.mailHashSecret) !== row.mailHash) {
-          throw new ORPCError('BAD_REQUEST', { message: 'email does not match the target user' })
-        }
-        const customerId = await getOrCreateCustomer(context.stripe, context.db, {
-          userId: row.id,
-          stripeCustomerId: row.stripeCustomerId,
-          // email is only used when no Customer exists yet (guarded above).
-          email: input.email ?? '',
-          name: input.name,
-          mailHash: row.mailHash,
-        })
-
-        const now = new Date()
-        const priceId = selectPriceId(context.billing, {
-          feeType: 'continuation',
-          variant: 'special',
-        })
-        const activityYear = computeActivityYear(now)
-        const result = await issueInvoice(context.stripe, {
-          customerId,
-          priceId,
-          daysUntilDue: context.billing.invoiceDaysUntilDue,
-          // Deterministic key so a rapid double-submit dedupes within Stripe's
-          // idempotency window (not a cross-time issuance ledger — see design Risks).
-          idempotencyKey: `inv:${customerId}:${priceId}:${activityYear}:continuation:special`,
-          metadata: {
-            fee_type: 'continuation',
-            variant: 'special',
-            activity_year: String(activityYear),
-          },
-        })
-        return result
+        return { invoiceId: outcome.invoiceId, hostedInvoiceUrl: outcome.hostedInvoiceUrl }
       }),
   },
 

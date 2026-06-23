@@ -50,6 +50,13 @@
       "when": 1781959782887,
       "tag": "0006_wild_nemesis",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1782186295450,
+      "tag": "0007_high_vermin",
+      "breakpoints": true
     }
   ]
 }
