@@ -12,6 +12,8 @@ export default withNuxt({
     'packages/db/drizzle/**',
     'openspec/**',
     '.claude/**',
+    // Machine-specific E2E verification helpers (absolute paths, ad-hoc scripts).
+    'scripts/e2e/**',
   ],
 }, {
   // Nuxt pages/layouts map to routes/named layouts, so single-word filenames

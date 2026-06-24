@@ -23,3 +23,6 @@ pnpm-debug.log*
 .DS_Store
 .idea
 *.tsbuildinfo
+
+# E2E verification screenshots (binary evidence, regenerated on each run)
+scripts/e2e/shots/
