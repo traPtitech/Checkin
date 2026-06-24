@@ -10,8 +10,11 @@ import { mysqlTable, varchar, timestamp, mysqlEnum, int, boolean, unique } from 
  */
 export const users = mysqlTable('users', {
   id: varchar('id', { length: 36 }).primaryKey(),
-  // hex HMAC-SHA256 → 64 chars. Unique: one row per person.
-  mailHash: varchar('mail_hash', { length: 64 }).notNull().unique(),
+  // hex HMAC-SHA256 → 64 chars. Unique: one row per person. NULLABLE: a person is
+  // identified by EITHER mail_hash OR traq_id — a payout-only recipient (Jomon
+  // refund, never did isct email verification) has a traq_id but no mail_hash.
+  // MariaDB allows multiple NULLs under a unique index. (add-traq-only-payout-recipient)
+  mailHash: varchar('mail_hash', { length: 64 }).unique(),
   // Authenticated traQ ID (non-PII secondary key). Added by add-traq-member-auth:
   // Jomon hands refunds keyed by traQ ID, so we link the authenticated traQ ID
   // (from an OAuth session, never form input) to this person row to resolve

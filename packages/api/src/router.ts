@@ -362,6 +362,7 @@ export const appRouter = {
           userId: row.id,
           stripeConnectedAccountId: row.stripeConnectedAccountId,
           mailHash: row.mailHash,
+          traqId: row.traqId,
         })
 
         // refresh/return land on app-origin pages (the UI is a later change).
@@ -477,6 +478,13 @@ async function issueSpecialForRow(
     { userId: row.id, activityYear, halves: halvesForCoverage(params.coverage) },
     {
       createDraft: async () => {
+        // A special invoice bills a person via their isct email; a payout-only
+        // recipient (traq_id, no mail_hash) has no email identity to bill.
+        if (!row.mailHash) {
+          throw new ORPCError('BAD_REQUEST', {
+            message: 'target user has no isct email identity (payout-only)',
+          })
+        }
         // Reuse the linked Customer; otherwise an email is required to create one.
         if (!row.stripeCustomerId && !params.email) {
           throw new ORPCError('BAD_REQUEST', {

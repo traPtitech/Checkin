@@ -4,7 +4,8 @@ import { schema, type Database } from '@checkin/db'
 
 export interface UserRow {
   id: string
-  mailHash: string
+  /** Null for a payout-only recipient (identified by traq_id, never email-verified). */
+  mailHash: string | null
 }
 
 /**
@@ -15,7 +16,8 @@ export interface UserRow {
  */
 export interface BillingUserRow {
   id: string
-  mailHash: string
+  /** Null for a payout-only recipient (identified by traq_id, never email-verified). */
+  mailHash: string | null
   traqId: string | null
   stripeCustomerId: string | null
   stripeConnectedAccountId: string | null
@@ -244,4 +246,134 @@ export async function getOrCreateUserByMailHash(db: Database, mailHash: string):
     throw new Error('failed to get-or-create user by mail_hash')
   }
   return row
+}
+
+/**
+ * Get the person row for a `traq_id`, creating a payout-only row (mail_hash NULL)
+ * if absent. For Jomon refunds whose payee has never done isct email verification:
+ * a person is identified by EITHER mail_hash or traq_id, so we mint a traq-keyed
+ * row to anchor the connected account + onboarding. Idempotent and race-safe via
+ * the unique `traq_id` constraint. (add-traq-only-payout-recipient)
+ */
+export async function getOrCreateUserByTraqId(db: Database, traqId: string): Promise<BillingUserRow> {
+  await db
+    .insert(schema.users)
+    .values({ id: randomUUID(), traqId })
+    .onDuplicateKeyUpdate({ set: { traqId } })
+
+  const row = await getUserByTraqId(db, traqId)
+  if (!row) {
+    throw new Error('failed to get-or-create user by traq_id')
+  }
+  return row
+}
+
+/**
+ * Race-safe compare-and-set of a person's `mail_hash`: only sets it when the
+ * column is still NULL (a payout-only row gaining an isct identity). Mirrors
+ * {@link linkTraqId}.
+ *   - `'set'`      — this call filled the column.
+ *   - `'exists'`   — the row already carries the SAME mail_hash (idempotent).
+ *   - `'conflict'` — that mail_hash is owned by another row (unique violation), or
+ *                    this row holds a DIFFERENT mail_hash. Caller must NOT merge.
+ * (add-traq-only-payout-recipient)
+ */
+export async function setUserMailHash(
+  db: Database,
+  userId: string,
+  mailHash: string,
+): Promise<'set' | 'exists' | 'conflict'> {
+  let result: unknown
+  try {
+    result = await db
+      .update(schema.users)
+      .set({ mailHash })
+      .where(and(
+        eq(schema.users.id, userId),
+        isNull(schema.users.mailHash),
+      ))
+  }
+  catch (err) {
+    if (isDuplicateKeyError(err)) {
+      return 'conflict'
+    }
+    throw err
+  }
+
+  const affected = (result as { affectedRows?: number })?.affectedRows ?? 0
+  const claimed = Array.isArray(result)
+    ? ((result[0] as { affectedRows?: number })?.affectedRows ?? 0)
+    : affected
+  if (claimed > 0) {
+    return 'set'
+  }
+
+  const existing = await getUserById(db, userId)
+  return existing?.mailHash === mailHash ? 'exists' : 'conflict'
+}
+
+/** How an email-verification resolved the person row (for logging/diagnostics). */
+export type EmailVerifyLinkage = 'isct-only' | 'created' | 'linked' | 'merged' | 'already' | 'conflict'
+
+/**
+ * Resolve the person row for an isct email verification, fusing it with the
+ * authenticated traQ identity (forward-auth header or traQ-OAuth session) when
+ * present, so payouts to this traQ ID resolve without a membership payment.
+ *
+ * Cases (rowX = by traq_id, rowH = by mail_hash):
+ *   - no traqId            → get-or-create by mail_hash (isct-only).
+ *   - rowX & rowH same row → already fully linked.
+ *   - rowX & rowH differ   → CONFLICT: two rows for one person; do NOT auto-merge
+ *                            (FK move is risky). Resolve to the billing row (rowH).
+ *   - rowX only (mail null)→ MERGE: set mail_hash onto the payout-only row.
+ *   - rowX with other mail → CONFLICT: traq_id bound to a different mail; fall back
+ *                            to the caller's own mail_hash row.
+ *   - rowH / neither       → get-or-create by mail_hash, then link the traq_id.
+ * Never fabricates a dual identity the DB disagrees with. (add-traq-only-payout-recipient)
+ */
+export async function resolveUserForEmailVerify(
+  db: Database,
+  input: { mailHash: string, traqId: string | null },
+): Promise<{ userId: string, linkage: EmailVerifyLinkage }> {
+  const { mailHash, traqId } = input
+
+  if (!traqId) {
+    const u = await getOrCreateUserByMailHash(db, mailHash)
+    return { userId: u.id, linkage: 'isct-only' }
+  }
+
+  const [rowX, rowH] = await Promise.all([
+    getUserByTraqId(db, traqId),
+    getUserByMailHash(db, mailHash),
+  ])
+
+  if (rowX && rowH) {
+    if (rowX.id === rowH.id) {
+      return { userId: rowX.id, linkage: 'already' }
+    }
+    // Two separate rows for one person — refuse to auto-merge; prefer billing row.
+    return { userId: rowH.id, linkage: 'conflict' }
+  }
+
+  if (rowX) {
+    if (rowX.mailHash === mailHash) {
+      return { userId: rowX.id, linkage: 'already' }
+    }
+    if (rowX.mailHash === null) {
+      const r = await setUserMailHash(db, rowX.id, mailHash)
+      return { userId: rowX.id, linkage: r === 'conflict' ? 'conflict' : 'merged' }
+    }
+    // traq_id is bound to a DIFFERENT mail_hash — don't link; use own isct row.
+    const u = await getOrCreateUserByMailHash(db, mailHash)
+    return { userId: u.id, linkage: 'conflict' }
+  }
+
+  // No row carries this traq_id: create-or-find by mail_hash, then link the traq.
+  const created = rowH === null
+  const u = await getOrCreateUserByMailHash(db, mailHash)
+  const link = await linkTraqId(db, u.id, traqId)
+  if (link === 'conflict') {
+    return { userId: u.id, linkage: 'conflict' }
+  }
+  return { userId: u.id, linkage: created ? 'created' : 'linked' }
 }

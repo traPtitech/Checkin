@@ -1,0 +1,1 @@
+ALTER TABLE `users` MODIFY COLUMN `mail_hash` varchar(64);

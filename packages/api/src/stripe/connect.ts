@@ -13,8 +13,10 @@ export interface ResolveConnectedAccountInput {
    * the column fresh from the DB before deciding to create, to stay race-safe.
    */
   stripeConnectedAccountId: string | null
-  /** Non-PII label for log/dashboard readability; never used as a lookup key. */
-  mailHash: string
+  /** Non-PII labels for log/dashboard readability; never used as lookup keys. A
+   *  payout-only recipient has no mail_hash, so traq_id labels the account instead. */
+  mailHash: string | null
+  traqId?: string | null
 }
 
 /**
@@ -45,10 +47,18 @@ export async function getOrCreateConnectedAccount(
     return existing
   }
 
-  // 2. Create an Express account (Stripe-managed hosted onboarding).
+  // 2. Create an Express account (Stripe-managed hosted onboarding). Label it with
+  //    whichever non-PII key we have (a payout-only recipient has only traq_id).
+  const metadata: Record<string, string> = {}
+  if (input.mailHash) {
+    metadata.mail_hash = input.mailHash
+  }
+  if (input.traqId) {
+    metadata.traq_id = input.traqId
+  }
   const created = await stripe.sdk.accounts.create({
     type: 'express',
-    metadata: { mail_hash: input.mailHash },
+    metadata,
   })
 
   // Conditional compare-and-set: only link if the column is still NULL. The

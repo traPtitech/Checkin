@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createDatabase, schema, type Database } from '@checkin/db'
-import { getUserByTraqId, linkTraqId } from './identity'
+import { getOrCreateUserByMailHash, getOrCreateUserByTraqId, getUserByMailHash, getUserByTraqId, linkTraqId, resolveUserForEmailVerify } from './identity'
 import { attachUserToSession, createSession, destroySession, resolveSession } from './session'
 
 /**
@@ -170,5 +170,111 @@ describe('session: dual-identity resolution', () => {
     }
     expect(await resolveSession(db, 'not-a-real-token')).toBeNull()
     expect(await resolveSession(db, undefined)).toBeNull()
+  })
+})
+
+describe('identity: getOrCreateUserByTraqId (payout-only rows)', () => {
+  it('creates a traq-only row (mail_hash NULL), idempotently', async () => {
+    if (!available) {
+      return
+    }
+    const traqId = `traq_${tag}_${randomUUID().slice(0, 6)}`
+    const a = await getOrCreateUserByTraqId(db, traqId)
+    userIds.push(a.id)
+    expect(a.traqId).toBe(traqId)
+    expect(a.mailHash).toBeNull()
+    expect(a.payoutOnboardingStatus).toBe('none')
+    // Idempotent: same row back, no duplicate.
+    const b = await getOrCreateUserByTraqId(db, traqId)
+    expect(b.id).toBe(a.id)
+  })
+})
+
+describe('identity: resolveUserForEmailVerify (merge matrix)', () => {
+  const freshMail = () => `hash_${tag}_${randomUUID().slice(0, 8)}`
+  const freshTraq = () => `traq_${tag}_${randomUUID().slice(0, 6)}`
+
+  it('no traqId → isct-only get-or-create by mail_hash', async () => {
+    if (!available) {
+      return
+    }
+    const mailHash = freshMail()
+    const r = await resolveUserForEmailVerify(db, { mailHash, traqId: null })
+    userIds.push(r.userId)
+    expect(r.linkage).toBe('isct-only')
+    expect((await getUserByMailHash(db, mailHash))?.id).toBe(r.userId)
+  })
+
+  it('case 1: neither row exists → creates a fully-linked (mail + traq) row', async () => {
+    if (!available) {
+      return
+    }
+    const mailHash = freshMail()
+    const traqId = freshTraq()
+    const r = await resolveUserForEmailVerify(db, { mailHash, traqId })
+    userIds.push(r.userId)
+    expect(r.linkage).toBe('created')
+    const row = await getUserByTraqId(db, traqId)
+    expect(row?.id).toBe(r.userId)
+    expect(row?.mailHash).toBe(mailHash)
+  })
+
+  it('case 2: a mail-only member gains the traq_id (linked)', async () => {
+    if (!available) {
+      return
+    }
+    const mailHash = freshMail()
+    const traqId = freshTraq()
+    const m = await getOrCreateUserByMailHash(db, mailHash)
+    userIds.push(m.id)
+    const r = await resolveUserForEmailVerify(db, { mailHash, traqId })
+    expect(r.userId).toBe(m.id)
+    expect(r.linkage).toBe('linked')
+    expect((await getUserByTraqId(db, traqId))?.id).toBe(m.id)
+  })
+
+  it('case 3: a payout-only row (traq, no mail) gets its mail_hash MERGED', async () => {
+    if (!available) {
+      return
+    }
+    const traqId = freshTraq()
+    const mailHash = freshMail()
+    const t = await getOrCreateUserByTraqId(db, traqId)
+    userIds.push(t.id)
+    const r = await resolveUserForEmailVerify(db, { mailHash, traqId })
+    expect(r.userId).toBe(t.id)
+    expect(r.linkage).toBe('merged')
+    expect((await getUserByTraqId(db, traqId))?.mailHash).toBe(mailHash)
+  })
+
+  it('case 4: already fully linked → no-op (already)', async () => {
+    if (!available) {
+      return
+    }
+    const mailHash = freshMail()
+    const traqId = freshTraq()
+    const r1 = await resolveUserForEmailVerify(db, { mailHash, traqId })
+    userIds.push(r1.userId)
+    const r2 = await resolveUserForEmailVerify(db, { mailHash, traqId })
+    expect(r2.userId).toBe(r1.userId)
+    expect(r2.linkage).toBe('already')
+  })
+
+  it('case 5: two separate rows for one person → conflict, no auto-merge', async () => {
+    if (!available) {
+      return
+    }
+    const mailHash = freshMail()
+    const traqId = freshTraq()
+    const m = await getOrCreateUserByMailHash(db, mailHash) // mail row, no traq
+    userIds.push(m.id)
+    const t = await getOrCreateUserByTraqId(db, traqId) // traq row, no mail
+    userIds.push(t.id)
+    const r = await resolveUserForEmailVerify(db, { mailHash, traqId })
+    expect(r.linkage).toBe('conflict')
+    expect(r.userId).toBe(m.id) // resolves to the billing (mail) row
+    // Neither row mutated — no FK-risky auto-merge.
+    expect((await getUserByTraqId(db, traqId))?.mailHash).toBeNull()
+    expect((await getUserByMailHash(db, mailHash))?.traqId).toBeNull()
   })
 })

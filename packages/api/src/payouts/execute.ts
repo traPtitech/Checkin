@@ -1,5 +1,5 @@
 import type { Database } from '@checkin/db'
-import { getUserById, getUserByTraqId } from '../auth/identity'
+import { getOrCreateUserByTraqId, getUserById, getUserByTraqId } from '../auth/identity'
 import type { StripeClient } from '../stripe/client'
 import { createAccountOnboardingLink, getOrCreateConnectedAccount } from '../stripe/connect'
 import { createTransfer } from '../stripe/transfers'
@@ -309,6 +309,7 @@ async function advancePayout(
       userId: user.id,
       stripeConnectedAccountId: user.stripeConnectedAccountId,
       mailHash: user.mailHash,
+      traqId: user.traqId,
     })
     const onboardingUrl = await createAccountOnboardingLink(deps.stripe, {
       accountId,
@@ -435,14 +436,20 @@ async function tryWriteBack(
   }
 }
 
-/** Resolve the payee for a request: by fresh traQ ID, else by the linked userId. */
+/**
+ * Resolve the payee for a request: by fresh traQ ID, else by the linked userId.
+ * A traQ ID with no person row yet mints a payout-only row (mail_hash NULL) — a
+ * Jomon refund recipient need not have done isct email verification to be paid.
+ * (add-traq-only-payout-recipient)
+ */
 async function resolvePayee(
   deps: PayoutDeps,
   req: JomonTransferRequest,
   row: PayoutRow,
 ) {
   if (req.payeeTraqId) {
-    return getUserByTraqId(deps.db, req.payeeTraqId)
+    return (await getUserByTraqId(deps.db, req.payeeTraqId))
+      ?? (await getOrCreateUserByTraqId(deps.db, req.payeeTraqId))
   }
   // No traQ ID (resume of an existing row): use the already-linked payee if any.
   if (row.userId) {

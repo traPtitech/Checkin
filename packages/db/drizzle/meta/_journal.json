@@ -57,6 +57,13 @@
       "when": 1782186295450,
       "tag": "0007_high_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1782312508235,
+      "tag": "0008_sticky_shiva",
+      "breakpoints": true
     }
   ]
 }

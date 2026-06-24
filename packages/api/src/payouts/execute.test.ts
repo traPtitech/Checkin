@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createDatabase, schema, type Database } from '@checkin/db'
 import { deriveMailHash } from '../auth/crypto'
-import { setPayoutOnboardingStatus } from '../auth/identity'
+import { getUserByTraqId, setPayoutOnboardingStatus } from '../auth/identity'
 import type { StripeClient } from '../stripe/client'
 import { StubJomonClient } from '../jomon/stub'
 import { JomonWriteBackUnsupportedError } from '../jomon/http'
@@ -131,22 +131,31 @@ describe('upsertPayoutByJomonRef (idempotent ingestion)', () => {
 })
 
 describe('processApprovedPayouts (orchestration)', () => {
-  it('leaves an unidentifiable (unlinked traQ ID) payee as pending and does not pay out', async () => {
+  it('auto-creates a payout-only user for an unlinked traQ ID and parks it as onboarding_waiting', async () => {
     if (!available) {
       return
     }
-    const jomon = new StubJomonClient([req(`jmn-unres-${tag}`, `nobody-${tag}`)])
+    const traqId = `nobody-${tag}`
+    const jomon = new StubJomonClient([req(`jmn-unres-${tag}`, traqId)])
     const summary = await processApprovedPayouts(
       { db, stripe: fakeStripe(), jomon },
       config,
     )
-    expect(summary.unresolved).toBe(1)
+    // No longer "unresolved": a payout-only user (traq_id, no mail_hash) is minted,
+    // so a Jomon refund recipient who never did isct email verification can be paid.
+    expect(summary.unresolved).toBe(0)
+    expect(summary.onboardingWaiting).toBe(1)
     expect(summary.paid).toBe(0)
 
+    const minted = await getUserByTraqId(db, traqId)
+    expect(minted).not.toBeNull()
+    expect(minted!.mailHash).toBeNull()
+    userIds.push(minted!.id)
+
     const row = await getPayoutByJomonRef(db, `jmn-unres-${tag}`)
-    expect(row?.userId).toBeNull()
-    expect(row?.status).toBe('pending')
-    // No write-back for an unresolved request.
+    expect(row?.userId).toBe(minted!.id)
+    expect(row?.status).toBe('onboarding_waiting')
+    // Not paid (onboarding not done) → no write-back.
     expect(jomon.writeBacks).toHaveLength(0)
   })
 

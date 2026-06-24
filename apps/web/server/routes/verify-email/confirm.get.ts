@@ -2,27 +2,23 @@ import {
   attachUserToSession,
   consumeEmailVerification,
   createSession,
-  getOrCreateUserByMailHash,
-  linkTraqId,
   resolveSession,
+  resolveUserForEmailVerify,
   sanitizeRedirect,
 } from '@checkin/api'
 
 /**
  * GET /verify-email/confirm — consume a magic-link token (single-use, expiry,
- * reuse-safe) and get-or-create the person row.
+ * reuse-safe) and resolve the person row, fusing it with the authenticated traQ
+ * identity (forward-auth header under NeoShowcase Soft, else the traQ-OAuth cookie
+ * session) when present. `resolveUserForEmailVerify` handles every case — create,
+ * link a member, MERGE a payout-only (traq_id, no mail_hash) row, or refuse to
+ * auto-merge two separate rows — so a Jomon refund recipient who later verifies
+ * their isct email keeps a single person row. (identity: §traQ ID 連結 / merge)
  *
- * If the request already carries a traQ **member** session that has no user yet,
- * we first try to `linkTraqId` the authenticated traQ ID onto the confirmed user
- * row. Only when that link is coherent (`linked`/`exists`, i.e. the traq_id truly
- * belongs to this user) do we attach `user_id` onto the SAME session, so the
- * member ends up with both identities on one session. On `conflict` (the traq_id
- * is owned by a DIFFERENT user) we do NOT attach to the traQ session — that would
- * fabricate a dual identity the DB disagrees with. Instead we mint a FRESH plain
- * user session so the person is logged in as their own isct identity, and warn for
- * admin attention. Otherwise (no traQ session) we mint a plain user session as
- * before. Then navigate to the stored same-site redirect.
- * (session spec: §連結済みは両アイデンティティを持つ)
+ * Session: when a coherent traQ-member cookie session exists (legacy OAuth), we
+ * attach `user_id` onto it in place; otherwise (forward-auth, or a conflict) we
+ * mint a fresh user session. Then navigate to the stored same-site redirect.
  */
 export default defineEventHandler(async (event) => {
   const config = resolveAuthConfig()
@@ -38,33 +34,25 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, '/?verify=invalid')
   }
 
-  const user = await getOrCreateUserByMailHash(db, consumed.mailHash)
-
-  // An existing traQ member session without a linked user → connect them in place.
+  // The authenticated traQ identity: the forward-auth header (NeoShowcase Soft)
+  // when enabled, else the traQ-OAuth cookie session.
   const sessionToken = getCookie(event, SESSION_COOKIE)
   const existing = await resolveSession(db, sessionToken)
-  if (sessionToken && existing?.traqId && !existing.userId) {
-    // Link BEFORE attaching: only fuse the two identities onto the live traQ
-    // session when the traq_id legitimately belongs to this user. A `conflict`
-    // (the traq_id is owned by someone else) must NOT be attached, or the session
-    // would carry a traQ linkage the DB attributes to a different person.
-    const result = await linkTraqId(db, user.id, existing.traqId)
-    if (result === 'conflict') {
-      console.warn(`linkTraqId conflict on verify-email confirm: traqId=${existing.traqId} userId=${user.id}`)
-      // Don't fabricate a dual identity. Mint a fresh plain user session so the
-      // person is logged in as their own isct identity (no false traQ linkage).
-      const conflictToken = await createSession(db, { userId: user.id }, config.sessionTtlSec)
-      setSessionCookie(event, conflictToken, config.sessionTtlSec)
-      return sendRedirect(event, sanitizeRedirect(consumed.redirect))
-    }
-    // Coherent linkage (linked/exists) → attach the user onto the SAME session so
-    // it carries both identities. Same cookie/token — no need to reset it.
-    await attachUserToSession(db, sessionToken, user.id)
-    return sendRedirect(event, sanitizeRedirect(consumed.redirect))
+  const traqId = (config.trustForwardAuth ? forwardedTraqId(event) : null) ?? existing?.traqId ?? null
+
+  const { userId, linkage } = await resolveUserForEmailVerify(db, { mailHash: consumed.mailHash, traqId })
+  if (linkage === 'conflict') {
+    console.warn(`identity conflict on verify-email confirm: traqId=${traqId} userId=${userId}`)
   }
 
-  // No traQ session (isct-only): establish a fresh user session as before.
-  const newToken = await createSession(db, { userId: user.id }, config.sessionTtlSec)
-  setSessionCookie(event, newToken, config.sessionTtlSec)
+  // Attach onto an existing traQ-member cookie session in place when coherent;
+  // otherwise (forward-auth has no such cookie, or a conflict) mint a fresh session.
+  if (sessionToken && existing?.traqId && !existing.userId && linkage !== 'conflict') {
+    await attachUserToSession(db, sessionToken, userId)
+  }
+  else {
+    const newToken = await createSession(db, { userId }, config.sessionTtlSec)
+    setSessionCookie(event, newToken, config.sessionTtlSec)
+  }
   return sendRedirect(event, sanitizeRedirect(consumed.redirect))
 })
