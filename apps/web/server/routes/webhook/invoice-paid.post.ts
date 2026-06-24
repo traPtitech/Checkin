@@ -1,4 +1,4 @@
-import { constructEvent, createNotifier, createStripeClient, hasProcessedStripeEvent, markPaidByInvoiceId, recordStripeEventOnce } from '@checkin/api'
+import { constructEvent, createNotifier, createStripeClient, hasProcessedStripeEvent, markPaidByInvoiceId, processInvoicePaid, recordStripeEventOnce } from '@checkin/api'
 
 /**
  * POST /webhook/invoice-paid — Stripe `invoice.paid` receiver.
@@ -39,25 +39,16 @@ export default defineEventHandler(async (event) => {
     return { ok: true, ignored: verified.type }
   }
 
-  // Idempotency (happy path): skip if this event was already processed before.
+  // Process the paid event: dedup, confirm the issuance ledger, notify, record.
+  // The flow lives in @checkin/api as a pure, injectable function so its ordering
+  // (notify→record for at-least-once retry) and dedup are unit-tested without a DB
+  // or live Stripe; the wiring below binds it to the real DB and notifier.
   const db = useDatabase()
-  if (await hasProcessedStripeEvent(db, verified.id)) {
-    return { ok: true, duplicate: true }
-  }
-
-  // Confirm the issuance ledger: flip the paid invoice's half-slots to `paid`.
-  // Idempotent and independent of the accountant notification — a 台帳外 invoice
-  // (no slots) is a no-op. Do this before notify/record so a failure here leaves
-  // the event unrecorded and Stripe retries. (issuance-ledger spec: §入金時の paid 確定)
-  if (verified.objectId) {
-    await markPaidByInvoiceId(db, verified.objectId)
-  }
-
-  // Notify FIRST, then record. A notify failure throws before recordStripeEventOnce
-  // runs, so the event stays unrecorded and Stripe will retry (at-least-once).
   const notifier = createNotifier()
-  await notifier.notify(`入金を確認しました（Stripe event ${verified.id}）。`)
-  await recordStripeEventOnce(db, verified)
-
-  return { ok: true }
+  return await processInvoicePaid({
+    hasProcessed: id => hasProcessedStripeEvent(db, id),
+    markPaid: async (id) => { await markPaidByInvoiceId(db, id) },
+    notify: m => notifier.notify(m),
+    recordOnce: e => recordStripeEventOnce(db, e),
+  }, verified)
 })
