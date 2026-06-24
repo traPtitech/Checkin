@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
 import {
+  applyForwardedIdentity,
   type Context,
   createAuthHelpers,
   createJomonClient,
@@ -66,6 +67,17 @@ export function clearOAuthCookies(event: H3Event): void {
   deleteCookie(event, OAUTH_REDIRECT_COOKIE, opts)
 }
 
+/**
+ * The traQ ID asserted by the trusted reverse proxy (NeoShowcase "Soft"
+ * member-auth). `X-Forwarded-User` is the current header; `X-Showcase-User` is
+ * kept for compatibility. Returns null when absent (not Soft-authenticated).
+ */
+export function forwardedTraqId(event: H3Event): string | null {
+  const raw = getHeader(event, 'x-forwarded-user') || getHeader(event, 'x-showcase-user')
+  const id = raw?.trim()
+  return id ? id : null
+}
+
 /** Compute double-submit CSRF validity from the cookie and `x-csrf-token` header. */
 export function isCsrfValid(event: H3Event): boolean {
   const cookie = getCookie(event, CSRF_COOKIE)
@@ -92,7 +104,14 @@ export async function buildRequestContext(event: H3Event): Promise<Context> {
   // Lazy: the `stub` driver is key-free; live drivers only validate creds when a
   // payout procedure actually reaches out to Jomon.
   const jomon = createJomonClient(jomonConfig)
-  const session = await resolveSession(db, getCookie(event, SESSION_COOKIE))
+  // Restore the cookie session (isct user identity), then — under NeoShowcase
+  // "Soft" member-auth — let the trusted proxy's X-Forwarded-User assert the traQ
+  // identity (and accountant flag). The isct user (userId/mailHash) still rides
+  // on the cookie session. (deploy: NeoShowcase Soft auth)
+  const cookieSession = await resolveSession(db, getCookie(event, SESSION_COOKIE))
+  const session = config.trustForwardAuth
+    ? applyForwardedIdentity(cookieSession, forwardedTraqId(event), config.accountantTraqIds)
+    : cookieSession
   const helpers = createAuthHelpers(session, isCsrfValid(event))
   return {
     db,

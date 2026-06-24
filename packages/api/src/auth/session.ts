@@ -98,6 +98,32 @@ export async function resolveSession(db: Database, token: string | undefined): P
 }
 
 /**
+ * Merge a reverse-proxy-forwarded traQ identity (NeoShowcase "Soft" member-auth's
+ * `X-Forwarded-User`) into the cookie session. When `forwardedTraqId` is set it
+ * becomes authoritative for the traQ identity — including the accountant flag via
+ * the allow-list — while the isct user identity (`userId`/`mailHash`) still comes
+ * from the email-verification cookie session. With no forwarded user the cookie
+ * session is returned unchanged (anonymous, or an email-only user). The caller
+ * must only invoke this when the proxy is trusted ({@link AuthConfig.trustForwardAuth}).
+ * Pure — no I/O. (session spec: §デュアル・アイデンティティ)
+ */
+export function applyForwardedIdentity(
+  cookieSession: SessionIdentity | null,
+  forwardedTraqId: string | null,
+  accountantTraqIds: string[],
+): SessionIdentity | null {
+  if (!forwardedTraqId) {
+    return cookieSession
+  }
+  return {
+    traqId: forwardedTraqId,
+    isAdmin: accountantTraqIds.includes(forwardedTraqId),
+    userId: cookieSession?.userId ?? null,
+    mailHash: cookieSession?.mailHash ?? null,
+  }
+}
+
+/**
  * Attach an isct user to an EXISTING session (keeping the same token/cookie).
  * Used when an isct email confirmation happens on a live traQ member session:
  * we link `user_id` onto that session rather than minting a new one, so the

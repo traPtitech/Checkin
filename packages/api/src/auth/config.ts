@@ -31,6 +31,14 @@ export interface AuthConfig {
   sessionTtlSec: number
   /** traQ IDs (usernames) granted accountant (admin) access. */
   accountantTraqIds: string[]
+  /**
+   * Trust the reverse proxy's `X-Forwarded-User` header as the authenticated
+   * traQ identity (NeoShowcase "Soft" member-auth). When true, the traQ identity
+   * comes from the proxy rather than our own traQ OAuth. Enable ONLY where the
+   * app is reachable solely via the trusted proxy, which overwrites/strips any
+   * client-supplied value — otherwise the header is spoofable.
+   */
+  trustForwardAuth: boolean
   traq: TraqOAuthConfig
   mailer: MailerConfig
 }

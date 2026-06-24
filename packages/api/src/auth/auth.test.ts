@@ -3,7 +3,7 @@ import { normalizeEmail, deriveMailHash, safeEqual } from './crypto'
 import { sanitizeRedirect } from './redirect'
 import { isAllowedEmailDomain, isAccountant } from './config'
 import { createAuthHelpers } from './context'
-import type { SessionIdentity } from './session'
+import { applyForwardedIdentity, type SessionIdentity } from './session'
 
 const SECRET = 'test-secret'
 
@@ -106,5 +106,30 @@ describe('context: auth helpers (dual identity)', () => {
   it('assertCsrf: throws when invalid, passes when valid', () => {
     expect(() => createAuthHelpers(user, false).assertCsrf()).toThrow()
     expect(() => createAuthHelpers(user, true).assertCsrf()).not.toThrow()
+  })
+})
+
+describe('session: applyForwardedIdentity (NeoShowcase Soft auth)', () => {
+  const cookieUser: SessionIdentity = { traqId: null, isAdmin: false, userId: 'u1', mailHash: 'h1' }
+
+  it('no forwarded user → returns the cookie session unchanged', () => {
+    expect(applyForwardedIdentity(cookieUser, null, ['alice'])).toBe(cookieUser)
+    expect(applyForwardedIdentity(null, null, ['alice'])).toBeNull()
+  })
+
+  it('forwarded user becomes the traQ identity, keeping the cookie isct user', () => {
+    const s = applyForwardedIdentity(cookieUser, 'bob', ['alice'])
+    expect(s).toEqual({ traqId: 'bob', isAdmin: false, userId: 'u1', mailHash: 'h1' })
+  })
+
+  it('forwarded user in the allow-list is an accountant', () => {
+    const s = applyForwardedIdentity(cookieUser, 'alice', ['alice'])
+    expect(s).toEqual({ traqId: 'alice', isAdmin: true, userId: 'u1', mailHash: 'h1' })
+  })
+
+  it('forwarded user with no cookie session → traQ-only identity', () => {
+    expect(applyForwardedIdentity(null, 'alice', ['alice'])).toEqual({
+      traqId: 'alice', isAdmin: true, userId: null, mailHash: null,
+    })
   })
 })

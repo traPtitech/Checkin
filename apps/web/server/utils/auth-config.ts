@@ -32,6 +32,7 @@ export function resolveAuthConfig(): AuthConfig {
     emailVerificationTtlSec: num(rc.emailVerificationTtlSec, 1800),
     sessionTtlSec: num(rc.sessionTtlSec, 2592000),
     accountantTraqIds: csv(rc.accountantTraqIds),
+    trustForwardAuth: String(rc.trustForwardAuth ?? '') === '1',
     traq: {
       clientId: String(rc.traqClientId ?? ''),
       clientSecret: String(rc.traqClientSecret ?? ''),

@@ -14,6 +14,9 @@ export default defineNuxtConfig({
     sessionTtlSec: process.env.SESSION_TTL ?? '2592000',
     // Accountant (admin) allow-list
     accountantTraqIds: process.env.CHECKIN_ACCOUNTANT_TRAQ_IDS ?? '',
+    // NeoShowcase "Soft" member-auth: trust the proxy's X-Forwarded-User header
+    // as the traQ identity ('1' to enable). Only safe behind the trusted proxy.
+    trustForwardAuth: process.env.CHECKIN_TRUST_FORWARD_AUTH ?? '',
     // traQ OAuth (client registered out-of-band; URLs/scope come from env)
     traqClientId: process.env.TRAQ_OAUTH_CLIENT_ID ?? '',
     traqClientSecret: process.env.TRAQ_OAUTH_CLIENT_SECRET ?? '',

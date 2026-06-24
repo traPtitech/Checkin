@@ -6,6 +6,13 @@ export default defineEventHandler((event) => {
   const query = getQuery(event)
   const redirect = sanitizeRedirect(typeof query.redirect === 'string' ? query.redirect : undefined)
 
+  // NeoShowcase "Soft" member-auth: prompt login via the platform's forward-auth
+  // endpoint instead of our own traQ OAuth. After it authenticates, the proxy
+  // adds X-Forwarded-User and buildRequestContext derives the traQ identity.
+  if (config.trustForwardAuth) {
+    return sendRedirect(event, `/_oauth/login?redirect=${encodeURIComponent(redirect)}`)
+  }
+
   const state = generateToken(16)
   const { verifier, challenge } = generatePkce()
   setOAuthCookies(event, { state, verifier, redirect })
