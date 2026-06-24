@@ -160,6 +160,10 @@ Checkin は値を Nuxt runtimeConfig から読む。runtimeConfig は**ビルド
 - **原因**: Swift 無しフォールバックの LocalStorage が `./uploads` を**作らず**参照していた（`NewLocalStorage` は既存ディレクトリ必須）。**修正済み**（`local/checkin-dev-env` commit `b41808e`：`os.MkdirAll` でディレクトリ作成）。
 - **対処**: Jomon を**最新の `local/checkin-dev-env` で再ビルド**（push 即ビルド未設定なら NeoShowcase で手動同期/再ビルド）。
 
+### Jomon UI で `{"message":"ClientID: cannot be blank."}`
+- **原因**: Jomon の Vue クライアントが**自前 traQ OAuth**（`GET /api/auth/genpkce`）を起動するが、Soft 運用で `TRAQ_CLIENT_ID` を設定していないため。
+- **対処**: **修正済み**（`local/checkin-dev-env` commit `408644d`）。クライアントのログイン導線を NeoShowcase の **`/_oauth/login?redirect=…`** 転送に変更。未ログイン者は強制 traQ 認証→`X-Forwarded-User` で `/api/users/me` 成功＝**全ページ要ログイン**を維持。**最新ブランチで再ビルド**すれば解消。member auth は **Soft のまま**（Hard にすると Checkin→Jomon の Bearer が弾かれる）。
+
 ### Checkin の env が効かない（設定したのに空扱い）
 - **原因**: 無印 env はビルド時の空値が焼かれている。
 - **対処**: **`NUXT_` 接頭辞**で設定（§2-4）。特に `NUXT_JOMON_API_VERSION=v1` を忘れると stub にフォールバックして実 Jomon を叩かない。
