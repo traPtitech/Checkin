@@ -64,7 +64,12 @@ member auth は **両アプリ Soft**（Off でも Hard でもなく Soft）。�
 | ~~`OS_*`（Swift）~~ | — | **不要**（未設定なら LocalStorage にフォールバック。`UPLOAD_DIR` 任意） |
 
 - DB は **起動時 auto-migrate**（`model.Migrate()`）＝マイグレーション手順不要。
-- **`SERVICE_USER_TRAP_ID` を Jomon admin に登録**（admin 管理 or `administrators` テーブル INSERT）。未登録だと書き戻しが 403。Jomon UI を使う人間の会計も admin にするなら同様。
+- **起動後に1回だけ admin をシード**。fresh な production DB は admin が空で、書き戻しが 403 になる。Adminer（https://adminer.ns.trap.jp）か SSH で:
+  ```sql
+  INSERT INTO administrators (trap_id) VALUES ('checkin'), ('<あなたのtraQ_ID>');
+  ```
+  - `checkin` = `SERVICE_USER_TRAP_ID`（Checkin の書き戻し用）。`<あなた>` = Jomon UI を admin で使う人。
+  - スキーマは初回起動の auto-migrate で作られるので、**起動後**に INSERT。
 
 ---
 
@@ -80,8 +85,9 @@ member auth は **両アプリ Soft**（Off でも Hard でもなく Soft）。�
 - Build Command: `corepack enable && pnpm install --frozen-lockfile && pnpm build`
 - Entrypoint（`NS_MARIADB_*`→`DATABASE_URL` 生成→migrate→起動）:
   ```sh
-  sh -lc 'export DATABASE_URL="mysql://${NS_MARIADB_USER}:${NS_MARIADB_PASSWORD}@${NS_MARIADB_HOSTNAME}:${NS_MARIADB_PORT}/${NS_MARIADB_DATABASE}"; pnpm db:migrate && node apps/web/.output/server/index.mjs'
+  sh -lc 'export DATABASE_URL="mysql://${NS_MARIADB_USER}:${NS_MARIADB_PASSWORD}@${NS_MARIADB_HOSTNAME}:${NS_MARIADB_PORT}/${NS_MARIADB_DATABASE}"; export NUXT_DATABASE_URL="$DATABASE_URL"; pnpm db:migrate && node apps/web/.output/server/index.mjs'
   ```
+- `pnpm db:migrate`(drizzle-kit) は `DATABASE_URL` を、Nuxt サーバは runtimeConfig 上書きの **`NUXT_DATABASE_URL`** を読むので**両方 export**する。
 - 単一イメージなので **drizzle-kit(devDep) が runtime に残り migrate が通る**（Command 推奨の理由）。
 
 **B. Runtime Buildpack**（Base Image も不要）
@@ -92,20 +98,25 @@ member auth は **両アプリ Soft**（Off でも Hard でもなく Soft）。�
 ### 2-3. アクセスURL
 - 例 `https://checkin-dev.trap.show`、HTTP Port = entrypoint の PORT（既定 3000）、Path Prefix = `/`、**member auth = Soft**
 
-### 2-4. 環境変数
+### 2-4. 環境変数（**すべて `NUXT_` 接頭辞**）
+
+Checkin は値を Nuxt runtimeConfig から読む。runtimeConfig は**ビルド時に焼かれる**ので、ランタイムで確実に効かせるには **`NUXT_` 接頭辞**で渡す（無印だとビルド時の空値が焼かれて効かない）。`DATABASE_URL`/`NUXT_DATABASE_URL` は entrypoint が生成。
+
 | env | 値 | 備考 |
 |---|---|---|
-| `DATABASE_URL` | （entrypoint で生成） | ビルトイン MariaDB |
-| **`CHECKIN_TRUST_FORWARD_AUTH`** | `1` | **Soft の `X-Forwarded-User` を traQ identity に**（forward-auth 有効化） |
-| `MAIL_HASH_SECRET` | 不変の長い乱数 | 本人キー導出。運用中変えない |
-| `APP_ORIGIN` | `https://checkin-dev.trap.show` | 自サイト URL（リンク/Account Link 戻り先） |
-| `CHECKIN_ACCOUNTANT_TRAQ_IDS` | 会計の traQ ID（カンマ区切り） | `X-Forwarded-User` と照合して admin 判定 |
-| `MAILER_DRIVER` | `log` | リンクをログ出力→bot が traQ へ中継（dev） |
-| `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`STRIPE_CONNECT_WEBHOOK_SECRET`/`PRICE_*`(4種) | Stripe test キー | 集金・払い戻し |
-| `JOMON_API_BASE_URL` | `https://jomon-dev.trap.show` | Jomon の URL |
-| `JOMON_API_VERSION` | `v1` | |
-| `JOMON_API_TOKEN` | **Jomon の `SERVICE_TOKEN` と同値** | Bearer サービストークン |
-| ~~`TRAQ_OAUTH_*`~~ | — | **不要**（`/login` は `/_oauth/login` に転送、自前 OAuth を使わない） |
+| **`NUXT_TRUST_FORWARD_AUTH`** | `1` | **Soft の `X-Forwarded-User` を traQ identity に**（forward-auth 有効化） |
+| `NUXT_MAIL_HASH_SECRET` | 不変の長い乱数（`openssl rand -hex 32`） | 本人キー導出。運用中変えない |
+| `NUXT_APP_ORIGIN` | `https://checkin-dev.trap.show` | 自サイト URL（リンク/Account Link 戻り先） |
+| `NUXT_ACCOUNTANT_TRAQ_IDS` | 会計の traQ ID（カンマ区切り） | `X-Forwarded-User` と照合して admin 判定 |
+| `NUXT_MAILER_DRIVER` | `log` | リンクをログ出力→bot が traQ へ中継（dev） |
+| `NUXT_JOMON_API_BASE_URL` | `https://jomon-dev.trap.show` | Jomon の URL |
+| `NUXT_JOMON_API_VERSION` | `v1` | **未設定だと stub にフォールバック**して実 Jomon を叩かない |
+| `NUXT_JOMON_API_TOKEN` | **Jomon の `SERVICE_TOKEN` と同値** | Bearer サービストークン |
+| `NUXT_STRIPE_SECRET_KEY` | `sk_test_…` | |
+| `NUXT_STRIPE_WEBHOOK_SECRET` | `whsec_…` | invoice-paid 用 |
+| `NUXT_STRIPE_CONNECT_WEBHOOK_SECRET` | `whsec_…` | account-updated 用 |
+| `NUXT_PRICE_SHINKI_ZENKI` / `NUXT_PRICE_SHINKI_KOUKI` / `NUXT_PRICE_KEIZOKU_STANDARD` / `NUXT_PRICE_KEIZOKU_SPECIAL` | `price_…` ×4 | 新規前期¥4,000(通期)/新規後期¥2,000/継続¥4,000/特別¥2,000 |
+| ~~`NUXT_TRAQ_*`~~ | — | **不要**（`/login` は `/_oauth/login` に転送、自前 OAuth を使わない） |
 
 > `CHECKIN_DEV_LOGIN` は設定しない（本番ビルドで 404 だが念のため）。
 
@@ -136,3 +147,19 @@ member auth は **両アプリ Soft**（Off でも Hard でもなく Soft）。�
 - **再起動でディスク揮発**: Jomon 画像（LocalStorage）は消える。払い戻しに無関係。
 - **Runtime 180MiB**: Nuxt Node OOM 時は自動シャットダウン(Blocking)＋低負荷で対処。
 - **実装状況**: forward-auth/Swift フォールバック（Jomon `local/checkin-dev-env`）と forward-auth（Checkin `claude/checkin-auth-collection`）は実装・コミット済み。Checkin は Dockerfile 不要（Command/Buildpack）。
+
+---
+
+## 5. トラブルシュート（実機で出たもの）
+
+### Jomon `panic: dial tcp [::1]:3306: connect: connection refused`（`main.go`）
+- **原因**: `MARIADB_HOSTNAME` 等が未設定で localhost(:3306) を見ている。
+- **対処**: `MARIADB_USERNAME/PASSWORD/HOSTNAME/DATABASE` を NeoShowcase の `NS_MARIADB_*` の値で設定（§1-4）。`NS_MARIADB_*` は Adminer のログイン情報か SSH `env` で確認。手コピーを避けたいなら ENTRYPOINT 変換ラッパ化（要相談）。
+
+### Jomon `panic: dir doesn't exist`（`router/service.go` `newImageRepository`）
+- **原因**: Swift 無しフォールバックの LocalStorage が `./uploads` を**作らず**参照していた（`NewLocalStorage` は既存ディレクトリ必須）。**修正済み**（`local/checkin-dev-env` commit `b41808e`：`os.MkdirAll` でディレクトリ作成）。
+- **対処**: Jomon を**最新の `local/checkin-dev-env` で再ビルド**（push 即ビルド未設定なら NeoShowcase で手動同期/再ビルド）。
+
+### Checkin の env が効かない（設定したのに空扱い）
+- **原因**: 無印 env はビルド時の空値が焼かれている。
+- **対処**: **`NUXT_` 接頭辞**で設定（§2-4）。特に `NUXT_JOMON_API_VERSION=v1` を忘れると stub にフォールバックして実 Jomon を叩かない。
