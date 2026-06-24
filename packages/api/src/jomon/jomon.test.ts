@@ -77,24 +77,76 @@ describe('JomonV1Client (/api/applications, strict, fail-safe)', () => {
 
   const client = new JomonV1Client('https://jomon.test', 'token')
 
-  it('lists accepted applications and normalizes unpaid repayment logs by trap_id', async () => {
+  it('normalizes a single-payee application by trap_id (amount = current_detail.amount)', async () => {
     mockFetchSequence([
       // 1. list ?current_state=accepted (compact, no per-payee data)
       [{ application_id: 'app_1' }],
-      // 2. GET /api/applications/app_1 (detailed)
+      // 2. GET /api/applications/app_1 (detailed) — exactly one payee, unpaid.
       {
         application_id: 'app_1',
+        // v1: amount lives at the application level (no per-payee amount).
+        current_detail: { amount: 4000 },
         repayment_logs: [
-          { repaid_to_user: { trap_id: 'alice' }, amount: 4000, repaid_at: null },
-          // already repaid ⇒ skipped
-          { repaid_to_user: { trap_id: 'bob' }, amount: 2000, repaid_at: '2026-01-01' },
+          { repaid_to_user: { trap_id: 'alice' }, repaid_at: null },
         ],
       },
     ])
     const out = await client.listApprovedTransferRequests()
+    // Single payee ⇒ amount = current_detail.amount.
     expect(out).toEqual([
       { jomonRef: 'app_1:alice', payeeTraqId: 'alice', amount: 4000, currency: 'jpy' },
     ])
+  })
+
+  it('flags a MULTI-payee application as multiPayee even when only one remains unpaid (no overpay)', async () => {
+    // Money-safety: current_detail.amount is the application TOTAL. A 2-payee app
+    // with one already repaid must NOT fast-path the remainder the full total —
+    // it has no per-payee amount, so it goes to manual review. (Codex Q2)
+    mockFetchSequence([
+      [{ application_id: 'app_partial' }],
+      {
+        application_id: 'app_partial',
+        current_detail: { amount: 6000 },
+        repayment_logs: [
+          { repaid_to_user: { trap_id: 'alice' }, repaid_at: null },
+          { repaid_to_user: { trap_id: 'bob' }, repaid_at: '2026-01-01' },
+        ],
+      },
+    ])
+    expect(await client.listApprovedTransferRequests()).toEqual([
+      { jomonRef: 'app_partial', payeeTraqId: '', amount: 6000, currency: 'jpy', multiPayee: true },
+    ])
+  })
+
+  it('flags an application with MULTIPLE unpaid payees as multiPayee (no auto-pay)', async () => {
+    mockFetchSequence([
+      [{ application_id: 'app_multi' }],
+      {
+        application_id: 'app_multi',
+        current_detail: { amount: 5000 },
+        repayment_logs: [
+          { repaid_to_user: { trap_id: 'x' }, repaid_at: null },
+          { repaid_to_user: { trap_id: 'y' }, repaid_at: null },
+        ],
+      },
+    ])
+    const out = await client.listApprovedTransferRequests()
+    // No per-payee amount to split ⇒ a single marker for manual review, no payee.
+    expect(out).toEqual([
+      { jomonRef: 'app_multi', payeeTraqId: '', amount: 5000, currency: 'jpy', multiPayee: true },
+    ])
+  })
+
+  it('emits nothing when every payee is already repaid', async () => {
+    mockFetchSequence([
+      [{ application_id: 'app_done' }],
+      {
+        application_id: 'app_done',
+        current_detail: { amount: 4000 },
+        repayment_logs: [{ repaid_to_user: { trap_id: 'z' }, repaid_at: '2026-01-01' }],
+      },
+    ])
+    expect(await client.listApprovedTransferRequests()).toEqual([])
   })
 
   it('SKIPS a malformed application detail and still processes the others', async () => {
@@ -107,8 +159,9 @@ describe('JomonV1Client (/api/applications, strict, fail-safe)', () => {
       // 3. GET /api/applications/app_good — valid ⇒ processed
       {
         application_id: 'app_good',
+        current_detail: { amount: 3000 },
         repayment_logs: [
-          { repaid_to_user: { trap_id: 'carol' }, amount: 3000, repaid_at: null },
+          { repaid_to_user: { trap_id: 'carol' }, repaid_at: null },
         ],
       },
     ])
@@ -138,7 +191,8 @@ describe('JomonV1Client (/api/applications, strict, fail-safe)', () => {
       new Response(
         JSON.stringify({
           application_id: 'app_ok',
-          repayment_logs: [{ repaid_to_user: { trap_id: 'dave' }, amount: 1500, repaid_at: null }],
+          current_detail: { amount: 1500 },
+          repayment_logs: [{ repaid_to_user: { trap_id: 'dave' }, repaid_at: null }],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       ),
@@ -158,7 +212,7 @@ describe('JomonV1Client (/api/applications, strict, fail-safe)', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     mockFetchSequence([
       [{ application_id: 'app_2' }],
-      { application_id: 'app_2', repayment_logs: [{ repaid_to_user: {}, amount: 4000 }] },
+      { application_id: 'app_2', current_detail: { amount: 4000 }, repayment_logs: [{ repaid_to_user: {}, repaid_at: null }] },
     ])
     const out = await client.listApprovedTransferRequests()
     expect(out).toEqual([])
@@ -170,7 +224,7 @@ describe('JomonV1Client (/api/applications, strict, fail-safe)', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     mockFetchSequence([
       [{ application_id: 'app_3' }],
-      { application_id: 'app_3', repayment_logs: [{ repaid_to_user: { trap_id: 'eve' }, amount: 0 }] },
+      { application_id: 'app_3', current_detail: { amount: 0 }, repayment_logs: [{ repaid_to_user: { trap_id: 'eve' }, repaid_at: null }] },
     ])
     const out = await client.listApprovedTransferRequests()
     expect(out).toEqual([])

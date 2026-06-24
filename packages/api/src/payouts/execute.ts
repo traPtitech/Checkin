@@ -88,6 +88,13 @@ export interface ProcessApprovedSummary {
   /** `jomon_ref`s of items that threw, for accountant follow-up. */
   errors: string[]
   /**
+   * Application ids (v1) skipped because they have MORE THAN ONE unpaid payee:
+   * v1 has no per-payee amount, so they are not auto-paid. Counted in
+   * `needsReview`; listed here so the UI can alert the accountant for manual
+   * handling. (payout-execution: §v1 の払い戻し金額と複数受取人の扱い)
+   */
+  multiPayeeRefs: string[]
+  /**
    * Set when the approved-requests fetch itself failed: the run is reported with
    * an empty body and this top-level error indicator instead of throwing, so a
    * Jomon list/HTTP/zod failure never aborts the whole run with nothing recorded.
@@ -117,6 +124,7 @@ export async function processApprovedPayouts(
     skippedFailed: 0,
     errored: 0,
     errors: [],
+    multiPayeeRefs: [],
   }
 
   // Batch-fetch isolation: the approved-requests pull happens BEFORE any per-item
@@ -136,6 +144,17 @@ export async function processApprovedPayouts(
   }
 
   for (const req of requests) {
+    // Multi-payee application (v1): no per-payee amount exists, so it must NOT be
+    // auto-paid. Do NOT upsert a payout row (there is no single payee/userId) and
+    // do NOT transfer — flag needs-review and surface it for the accountant.
+    // (payout-execution: §v1 の払い戻し金額と複数受取人の扱い)
+    if (req.multiPayee) {
+      summary.ingested += 1
+      summary.needsReview += 1
+      summary.multiPayeeRefs.push(req.jomonRef)
+      continue
+    }
+
     // Per-item error isolation: one bad item (Jomon write-back, DB hiccup,
     // malformed request, etc.) must NOT abort the rest of the batch. Record it
     // and continue. (Codex hardening)
@@ -177,6 +196,14 @@ export async function executePayout(
 ): Promise<PayoutStepResult> {
   const requests = await deps.jomon.listApprovedTransferRequests()
   const req = requests.find(r => r.jomonRef === jomonRef)
+  if (req?.multiPayee) {
+    // Defensive: a multi-payee application has no single payee/amount, so it must
+    // NOT be paid even via the manual single-item path. No row is created.
+    // (The UI never offers `execute` on a marker — markers are not table rows —
+    // but guard here so no caller can promote one to a transfer.)
+    // (payout-execution: §v1 の払い戻し金額と複数受取人の扱い)
+    return { jomonRef, outcome: 'needs_review', status: 'pending' }
+  }
   if (!req) {
     // It may have already settled (and been removed from "approved"). If we have
     // a local row, advance using its stored amount/currency; else surface it.

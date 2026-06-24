@@ -109,6 +109,13 @@ const processing = ref(false)
 const processError = ref<string | null>(null)
 const processSummary = ref<Record<string, unknown> | null>(null)
 
+// Applications skipped because they have multiple unpaid payees (v1 has no
+// per-payee amount, so they are not auto-paid). Surfaced as a manual-action alert.
+const multiPayeeRefs = computed<string[]>(() => {
+  const v = processSummary.value?.multiPayeeRefs
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+})
+
 async function onProcessApproved() {
   if (processing.value) {
     return
@@ -317,6 +324,15 @@ onMounted(() => {
           </dl>
         </template>
       </UAlert>
+
+      <UAlert
+        v-if="multiPayeeRefs.length"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-triangle-alert"
+        title="複数受取人の申請があります（自動処理されません・手動対応が必要）"
+        :description="`対象の申請ID: ${multiPayeeRefs.join(', ')}`"
+      />
 
       <UAlert
         v-if="listError"

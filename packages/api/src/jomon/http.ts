@@ -132,12 +132,15 @@ const v1CompactApplicationSchema = z.object({
 
 const v1RepaymentLogSchema = z.object({
   repaid_to_user: z.object({ trap_id: z.string().trim().min(1) }),
-  amount: z.number().int().positive(),
+  // NOTE: v1 has NO per-payee amount on a repayment log — the amount lives on the
+  // application (`current_detail.amount`). `repaid_at` present ⇒ already repaid.
   repaid_at: z.string().nullish(),
 })
 
 const v1DetailedApplicationSchema = z.object({
   application_id: z.string().trim().min(1),
+  // v1 holds the refund amount at the application level only (no per-payee split).
+  current_detail: z.object({ amount: z.number().int().positive() }),
   repayment_logs: z.array(v1RepaymentLogSchema),
 })
 
@@ -170,16 +173,37 @@ export class JomonV1Client extends JomonHttpClient {
           throw new Error(`Jomon v1 application ${appId} failed validation: ${detail.error.message}`)
         }
 
-        // 3. One DTO per still-unpaid (no repaid_at) repayment log.
-        for (const log of detail.data.repayment_logs) {
-          if (log.repaid_at) {
-            continue
-          }
-          const trapId = log.repaid_to_user.trap_id
+        // 3. v1 has only an application-level amount (`current_detail.amount`),
+        //    with NO per-payee split. So the decision is by the TOTAL number of
+        //    payees on the application, NOT how many are still unpaid:
+        //      - all payees already repaid → nothing to do.
+        //      - exactly ONE payee on the application → its amount IS the
+        //        application amount; emit a normal request (if unpaid).
+        //      - MORE THAN ONE payee → `current_detail.amount` is the application
+        //        total and cannot be attributed to a single person, so it must
+        //        NOT be auto-paid even when only one remains unpaid (paying the
+        //        full total to the remainder would overpay). Emit a `multiPayee`
+        //        marker → orchestration flags needs-review, UI alerts (no transfer).
+        //    (payout-execution: §v1 の払い戻し金額と複数受取人の扱い)
+        const amount = detail.data.current_detail.amount
+        const logs = detail.data.repayment_logs
+        const unpaid = logs.filter(log => !log.repaid_at)
+        if (unpaid.length === 0) {
+          // Every payee already repaid — nothing to pay (single or multi).
+        }
+        else if (logs.length > 1) {
+          // Multiple payees on one application → no reliable per-payee amount.
+          // Marker built directly because `toTransferRequest` requires a non-empty
+          // payeeTraqId, which a multi-payee application has none single.
+          out.push({ jomonRef: appId, payeeTraqId: '', amount, currency: JOMON_CURRENCY, multiPayee: true })
+        }
+        else {
+          // Exactly one payee on the application (unpaid) → amount = application amount.
+          const trapId = logs[0]!.repaid_to_user.trap_id
           out.push(toTransferRequest({
             jomonRef: `${appId}:${trapId}`,
             payeeTraqId: trapId,
-            amount: log.amount,
+            amount,
           }))
         }
       }

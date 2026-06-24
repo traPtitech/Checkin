@@ -9,7 +9,7 @@ traP の Stripe 集金・払い戻しシステム「Checkin」。design.md（リ
 第一弾スコープ（①集金 ②入出金一覧 ③払い戻し）＋認証基盤＋利用者 UI＋会計 UI＋**重複支払い防止（発行台帳）**を **OpenSpec 仕様駆動**で実装済み。
 
 - **全ゲート緑**: `pnpm lint` / `pnpm typecheck` / `pnpm build` / `pnpm test`（120 tests）。
-- **11 changes をアーカイブ済み**（`openspec/changes/archive/`）、**13 specs**（`openspec/specs/`）。
+- **12 changes をアーカイブ済み**（`openspec/changes/archive/`）、**13 specs**（`openspec/specs/`）。
 - **未コミット差分あり**（`add-accountant-ui` ＋ `add-issuance-ledger` ＋ dev 環境）。**push / PR は未実施**。
 - 直近: `add-issuance-ledger`（半期スロット台帳で会員費の二重払いを拒否）。**実 Stripe で E2E 済み**（発行→支払い→再発行拒否／未払い時 URL 再利用／通期×半期の重複拒否）。Codex 2 周レビューで money-safety（draft-first 順序）を確定。
 - **ローカル dev 構成あり**（下記 §10）: `.env`＋`apps/web/.env` symlink、Dev ログイン `/dev/login`、Stripe test キー＋4 Price＋`stripe listen` 配線済み。
@@ -78,12 +78,14 @@ traP の Stripe 集金・払い戻しシステム「Checkin」。design.md（リ
 
 ## 5. 残作業（優先度順）
 
-### A. 実 Jomon 連携（要 Jomon メンテナ調整 → その後コードは概ね準備済み）
-実 API 調査済み（`packages/api/src/jomon/http.ts` に実装、default driver は `stub`）。**Jomon 側に 2 つの追加が必要**:
-1. **Bearer サービストークン受け口**: 現状 Jomon(v1/v2) は traQ OAuth/cookie のみで Bearer 受け口が無い。Checkin→Jomon は片方向 Bearer 前提。
-2. **v2 の per-payee 書き戻し API**: v2 は `ApplicationTarget.paid_at` が読み取り専用で「支払い済み」を個別に書ける API が無い（v1 は `PUT /api/applications/{id}/states/repaid/{trapId}` あり）。design §9 / Jomon issue #183 系。
-- 上記が入ったら `JOMON_API_VERSION=v1`/`v2` で実接続 E2E。`jomon/http.ts` の `// TODO: confirm field names/paths against live Jomon` を実レスポンスで確定（特に v1 の 1 application 複数 payee の amount 分配は未確定）。
-- 実 API 形（確認済み）: 一覧 `GET /api/applications`（v1 `current_state=accepted`/v2 `status=approved`）。payee=traQ ID（v1 `repaid_to_user.trap_id`、v2 `target`UUID→`GET /api/users`の`name`）。通貨なし(jpy)。
+### A. 実 Jomon 連携（**v1 ローカルで実接続 E2E 済み**。本番接続は Bearer 受け口のみ要調整）
+**本番は v1（Jomon repo の `master` ブランチ）**。`v2` は default ブランチだが開発中の見込み。ローカル Jomon v1 を `/home/kaitoyama/Jomon-v1` に clone・起動済み（`docker-compose up -d --build db jomon-server`、API は **:1323 直**、db :3308＝Checkin の 3306 と衝突回避、Taskfile に `-buildvcs=false` を追加して起動）。
+- **debug ビルド（`-tags debug`）は `AuthUser` がセッション/トークンを見ず常に admin `MyUser` 認証** → **ローカル検証では Bearer パッチ不要**。本番（`!debug`）に入れるときだけ `router/service.go` の `AuthUserMiddleware`/`AuthUser` に Bearer 受け口を足す（compose に `SERVICE_TOKEN` placeholder あり）。これが残る唯一の Jomon 側調整。
+- **実 v1 で確定した連携**（`fix-jomon-v1-amount-multipayee` で Checkin v1 ドライバを実機整合に修正済み）: 一覧 `GET /api/applications?current_state=accepted`（素の配列）→ 詳細 `GET /api/applications/{id}` の `repayment_logs[].repaid_to_user.trap_id`＋`repaid_at`。**金額は per-payee に無く `current_detail.amount`（申請単位）**。書き戻し `PUT /api/applications/{id}/states/repaid/{trapId}` `{repaid_at:"YYYY-MM-DD"}`（**v1 は per-payee 書き戻しあり＝閉ループ可**。live 200 確認）。
+- **複数 payee は自動送金せず needs-review＋UI 警告**（運用上は 1 人前提。総 payee 数≥2 ならマーカー化＝過払い防止。Codex HIGH 修正済み）。POST 申請は **multipart**（`-F 'details={...}'`）。
+- **closed-loop E2E 完了**（`.env` を `JOMON_API_VERSION=v1` / `JOMON_API_BASE_URL=http://localhost:1323` / `JOMON_API_TOKEN=任意`）: 単一 payee → `ingested:1`→本人解決→onboarding ゲート→**実 Stripe transfer ¥1,500（`tr_1TlhrP…`→`acct_1QUM03CW4ItwVkk3`）→ `paid` → Jomon に `repaid` 書き戻し（live 200）** まで通った。再実行は `already_paid`（二重送金なし、balance 1617→117）。複数/部分支払い → `multiPayeeRefs`＋`/payouts` 警告（送金せず）。
+  - 送金は onboarding 済みテスト account（`acct_1QUM03CW4ItwVkk3`、[[payout-e2e-stripe]]）に devmember を DB で紐付け＋`done` にして実施（**新規 Express の onboarding 完了は hosted フロー必須**なので回避）。platform available 残高は少額（実施後 ¥117）。
+- **v2 は別系統で未整備**（per-payee 書き戻し API が無い＝`writeBackResult` は `JomonWriteBackUnsupportedError`）。v2 を採る場合は Jomon 側に書き戻し追加が要る。Checkin v2 ドライバも実 v2（`status=accepted`／素配列／`current_detail` 不使用…）に未整合の TODO 残（v1 に注力するなら不要）。
 
 ### B. Stripe 実 E2E（test キー投入で可能）
 - 集金: `STRIPE_SECRET_KEY`(test) ＋ `PRICE_*`(4種) ＋ `STRIPE_WEBHOOK_SECRET` → `/membership` から発行→支払い→`invoice.paid` 通知。

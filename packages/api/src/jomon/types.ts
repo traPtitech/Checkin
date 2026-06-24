@@ -29,6 +29,15 @@ export interface JomonTransferRequest {
   amount: number
   /** ISO currency code; always `'jpy'` for Jomon. */
   currency: string
+  /**
+   * v1 only: set when an application has MORE THAN ONE unpaid payee. v1 carries
+   * no per-payee amount (only the application-level `current_detail.amount`), so
+   * such a request cannot be auto-paid without inventing a split. The
+   * orchestration must NOT transfer it — it flags needs-review and the UI alerts
+   * the accountant for manual handling. `payeeTraqId` is empty on such a marker.
+   * (payout-execution: §v1 の払い戻し金額と複数受取人の扱い)
+   */
+  multiPayee?: boolean
 }
 
 /** Result written back to Jomon after a payout settles. */
