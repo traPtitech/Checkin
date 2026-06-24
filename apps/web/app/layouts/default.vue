@@ -58,6 +58,14 @@ async function onLogout() {
               >
                 払い戻し
               </UButton>
+              <UButton
+                to="/special-invoice"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+              >
+                特別発行
+              </UButton>
             </template>
             <span class="text-muted">
               <template v-if="isAdmin">会計: {{ traqId }}</template>

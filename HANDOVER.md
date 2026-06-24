@@ -95,7 +95,7 @@ traP の Stripe 集金・払い戻しシステム「Checkin」。design.md（リ
 ### C. 会計（管理）UI（✅ 実装済み = `add-accountant-ui`）
 `/payments`（入出金一覧・フィルタ・append ページネーション・Dashboard リンク）と `/payouts`（払い戻し管理: `processApproved`/`list`/`execute`/`createOnboardingLink`/`onboardingStatus`）を実装済み。残りの会計 UI:
 - **`/admins`**: 会計は env 許可リスト管理（旧 DB 管理者テーブルは deprecated）なので管理 UI は**意図的に未実装**。traQ グループ判定（後述 D）に移行する場合も UI は不要の見込み。
-- **特別請求書発行 UI**（`membership.issueSpecialInvoice`、会計のみ ¥2,000）: 対象 user を選ぶ検索/一覧 API・UI が無く未実装。先に user 検索 API（または payouts 一覧の userId から発行）を足す小さな change が必要。
+- **特別請求書発行 UI**（会計のみ ¥2,000）: ✅ 実装済み。`/special-invoice`（会計ナビ「特別発行」）でメールアドレスを指定して発行。`membership.issueSpecialInvoiceByEmail`（`email`/`name?`/`coverage`/`activityYear?`）が mail_hash で対象者を get-or-create するため**初見ユーザーも入力可**（user 検索 API は不要）。許可ドメイン宛のみ・hosted invoice URL を会計が本人へ転送。userId 指定の `issueSpecialInvoice` も従来どおり残置（共通ヘルパ `issueSpecialForRow` に集約）。
 
 ### D. ハードニング・フォローアップ
 - `users.stripe_customer_id` に connected account 同様の **unique 制約＋get-or-create 競合対策**（Codex 指摘の後続）。小さな change。
@@ -142,7 +142,7 @@ pnpm test                           # vitest（DB バックドテストは Maria
 1. （並行）Jomon メンテナと Bearer 受け口＋v2 書き戻しを握る（残作業 A）。
 2. Stripe/Connect の test キーが入ったら各 BLOCKED E2E を消化（残作業 B）。会計 UI（`/payments`・`/payouts`）も実データで E2E（`add-accountant-ui` の tasks 4.3/4.4）。
 3. `stripe_customer_id` unique 化（残作業 D）。
-4. （任意）特別請求書発行 UI（会計が `coverage`/`activityYear` 指定）＋ user 検索 API（残作業 C の残り）。
+4. ~~（任意）特別請求書発行 UI（会計が `coverage`/`activityYear` 指定）＋ user 検索 API~~ → **完了**（`/special-invoice`、メール指定で初見ユーザーも発行可。user 検索 API は不要に）。残: 実 Stripe キーでの発行→支払い E2E。
 5. ~~（任意）銀行振込（`customer_balance`/`jp_bank_transfer`）~~ → **完了**（`add-bank-transfer-payment`、全請求書をカード＋口座振込の両対応に）。残: Stripe アカウントで JPY＋日本の銀行振込を有効化のうえ test mode E2E（archive の tasks 4.x が BLOCKED）。
 
 ## 10. ローカル dev 環境（このセッションで構築・未コミット）

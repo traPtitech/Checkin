@@ -1,14 +1,16 @@
 import { z } from 'zod'
 import { ORPCError } from '@orpc/server'
-import { adminProc, pub, userProc } from './orpc'
+import { adminProc, pub, userProc, type Context } from './orpc'
 import {
   isAllowedEmailDomain,
   deriveMailHash,
   sanitizeRedirect,
   createEmailVerification,
   getUserById,
+  getOrCreateUserByMailHash,
   linkTraqId,
   setPayoutOnboardingStatus,
+  type BillingUserRow,
 } from './auth'
 import { computeActivityYear, computeTerm, selectPriceId } from './billing'
 import {
@@ -237,68 +239,55 @@ export const appRouter = {
         if (!row) {
           throw new ORPCError('NOT_FOUND', { message: 'target user not found' })
         }
+        return issueSpecialForRow(context, {
+          row,
+          email: input.email,
+          name: input.name,
+          coverage: input.coverage,
+          activityYear: input.activityYear,
+        })
+      }),
 
-        // Ledger gate (issuance-ledger): reserve the single target half through the
-        // ledger so a payable invoice never exists without a guard. Customer
-        // resolution + email validation happen lazily in `createDraft` (only on
-        // the `free` path), so a rejected duplicate has no side effects.
-        const now = new Date()
-        const activityYear = input.activityYear ?? computeActivityYear(now)
-        const outcome = await issueWithLedger(
-          context.db,
-          { userId: row.id, activityYear, halves: halvesForCoverage(input.coverage) },
-          {
-            createDraft: async () => {
-              // Reuse the linked Customer; otherwise an email is required to create one.
-              if (!row.stripeCustomerId && !input.email) {
-                throw new ORPCError('BAD_REQUEST', {
-                  message: 'email is required to create a Stripe Customer for this user',
-                })
-              }
-              // When we will create a Customer from the supplied email, the email must
-              // belong to the target user (mail_hash match). Otherwise we would
-              // permanently link the user row to the wrong email/Customer.
-              if (!row.stripeCustomerId && input.email
-                && deriveMailHash(input.email, context.config.mailHashSecret) !== row.mailHash) {
-                throw new ORPCError('BAD_REQUEST', { message: 'email does not match the target user' })
-              }
-              const customerId = await getOrCreateCustomer(context.stripe, context.db, {
-                userId: row.id,
-                stripeCustomerId: row.stripeCustomerId,
-                // email is only used when no Customer exists yet (guarded above).
-                email: input.email ?? '',
-                name: input.name,
-                mailHash: row.mailHash,
-              })
-              const priceId = selectPriceId(context.billing, {
-                feeType: 'continuation',
-                variant: 'special',
-              })
-              const { invoiceId } = await createDraftInvoice(context.stripe, {
-                customerId,
-                priceId,
-                daysUntilDue: context.billing.invoiceDaysUntilDue,
-                metadata: {
-                  fee_type: 'continuation',
-                  variant: 'special',
-                  coverage: input.coverage,
-                  activity_year: String(activityYear),
-                },
-              })
-              return invoiceId
-            },
-            finalizeAndSend: id => finalizeAndSendInvoice(context.stripe, id),
-            voidInvoice: id => voidInvoiceSafe(context.stripe, id),
-          },
-        )
-        if (!outcome.ok) {
-          throw new ORPCError('CONFLICT', {
-            message: outcome.rejected === 'paid'
-              ? '対象の期間は既に支払い済みです。'
-              : '支払い対象の期間が既存の請求と重複しています。',
-          })
+    /**
+     * Issue a **special** (継続特別 ¥2,000) invoice selecting the target by
+     * EMAIL. Admin (accountant) only. The email IS the person selector: we
+     * get-or-create the person row keyed by its `mail_hash`, so a first-time,
+     * never-before-seen member is created on the spot (no prior login / userId
+     * required). The Customer is then created from that same email, so the
+     * spec's "管理者が指定したメール＝対象者" mail_hash match holds by construction.
+     * The domain must be an allowed isct domain — same guard as self-issuance —
+     * so a typo can't mint a junk person row. (membership-billing spec: §発行の認可 — 特別は管理者)
+     */
+    issueSpecialInvoiceByEmail: adminProc
+      .input(z.object({
+        email: z.string().email(),
+        name: z.string().min(1).optional(),
+        coverage: z.enum(['zenki', 'kouki']),
+        activityYear: z.number().int().optional(),
+      }))
+      .handler(async ({ input, context }) => {
+        context.assertCsrf()
+
+        if (!isAllowedEmailDomain(input.email, context.config.allowedEmailDomains)) {
+          throw new ORPCError('BAD_REQUEST', { message: 'email domain is not allowed' })
         }
-        return { invoiceId: outcome.invoiceId, hostedInvoiceUrl: outcome.hostedInvoiceUrl }
+
+        // Resolve the person by mail_hash, creating the row for a first-time
+        // member, then load its full billing row (Stripe links/state).
+        const mailHash = deriveMailHash(input.email, context.config.mailHashSecret)
+        const base = await getOrCreateUserByMailHash(context.db, mailHash)
+        const row = await getUserById(context.db, base.id)
+        if (!row) {
+          // get-or-create just guaranteed the row exists; a miss is an internal fault.
+          throw new ORPCError('INTERNAL_SERVER_ERROR', { message: 'failed to resolve target user' })
+        }
+        return issueSpecialForRow(context, {
+          row,
+          email: input.email,
+          name: input.name,
+          coverage: input.coverage,
+          activityYear: input.activityYear,
+        })
       }),
   },
 
@@ -458,6 +447,88 @@ export const appRouter = {
         )
       }),
   },
+}
+
+/**
+ * Core of special (継続特別 ¥2,000) issuance for an already-resolved person row.
+ * Shared by both selectors (`issueSpecialInvoice` by userId / `issueSpecialInvoiceByEmail`
+ * by email). Reserves the single target half through the ledger so a payable
+ * invoice never exists without a guard; Customer resolution + email validation
+ * happen lazily in `createDraft` (only on the `free` path), so a rejected
+ * duplicate has no side effects. (issuance-ledger spec / membership-billing spec)
+ */
+async function issueSpecialForRow(
+  context: Context,
+  params: {
+    row: BillingUserRow
+    /** Used only when the row has no Customer yet (to create one). */
+    email?: string
+    name?: string
+    coverage: 'zenki' | 'kouki'
+    /** Defaults to the current activity year; pass next year for a 後期 継続特別. */
+    activityYear?: number
+  },
+) {
+  const { row } = params
+  const now = new Date()
+  const activityYear = params.activityYear ?? computeActivityYear(now)
+  const outcome = await issueWithLedger(
+    context.db,
+    { userId: row.id, activityYear, halves: halvesForCoverage(params.coverage) },
+    {
+      createDraft: async () => {
+        // Reuse the linked Customer; otherwise an email is required to create one.
+        if (!row.stripeCustomerId && !params.email) {
+          throw new ORPCError('BAD_REQUEST', {
+            message: 'email is required to create a Stripe Customer for this user',
+          })
+        }
+        // When we will create a Customer from the supplied email, the email must
+        // belong to the target user (mail_hash match). Otherwise we would
+        // permanently link the user row to the wrong email/Customer. (For the
+        // by-email selector the row is keyed by this email's mail_hash, so the
+        // check is trivially satisfied.)
+        if (!row.stripeCustomerId && params.email
+          && deriveMailHash(params.email, context.config.mailHashSecret) !== row.mailHash) {
+          throw new ORPCError('BAD_REQUEST', { message: 'email does not match the target user' })
+        }
+        const customerId = await getOrCreateCustomer(context.stripe, context.db, {
+          userId: row.id,
+          stripeCustomerId: row.stripeCustomerId,
+          // email is only used when no Customer exists yet (guarded above).
+          email: params.email ?? '',
+          name: params.name,
+          mailHash: row.mailHash,
+        })
+        const priceId = selectPriceId(context.billing, {
+          feeType: 'continuation',
+          variant: 'special',
+        })
+        const { invoiceId } = await createDraftInvoice(context.stripe, {
+          customerId,
+          priceId,
+          daysUntilDue: context.billing.invoiceDaysUntilDue,
+          metadata: {
+            fee_type: 'continuation',
+            variant: 'special',
+            coverage: params.coverage,
+            activity_year: String(activityYear),
+          },
+        })
+        return invoiceId
+      },
+      finalizeAndSend: id => finalizeAndSendInvoice(context.stripe, id),
+      voidInvoice: id => voidInvoiceSafe(context.stripe, id),
+    },
+  )
+  if (!outcome.ok) {
+    throw new ORPCError('CONFLICT', {
+      message: outcome.rejected === 'paid'
+        ? '対象の期間は既に支払い済みです。'
+        : '支払い対象の期間が既存の請求と重複しています。',
+    })
+  }
+  return { invoiceId: outcome.invoiceId, hostedInvoiceUrl: outcome.hostedInvoiceUrl }
 }
 
 /** Build the payout orchestration config from the request Context. */
