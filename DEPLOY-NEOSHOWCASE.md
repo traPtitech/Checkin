@@ -61,15 +61,14 @@ member auth は **両アプリ Soft**（Off でも Hard でもなく Soft）。�
 | **`SERVICE_USER_TRAP_ID`** | 例 `checkin` | **Jomon に admin 登録した trap_id**。書き戻しが `IsAdmin` 要求＋実行者として記録 |
 | `WEBHOOK_SECRET`/`WEBHOOK_CHANNEL_ID`/`WEBHOOK_ID` | traQ 通知用 | dev は空で可 |
 | ~~`TRAQ_CLIENT_ID`~~ | — | **不要**（UI 認証は forward-auth、サービスは Bearer。自前 OAuth を使わない） |
+| **`INITIAL_ADMIN_TRAP_IDS`** | `<あなたのtraQ_ID>`（カンマ区切り可） | **起動時に admin 自動シード**。`SERVICE_USER_TRAP_ID` も自動で admin になる |
+| ~~`TRAQ_CLIENT_ID`~~ | — | **不要**（UI 認証は forward-auth、サービスは Bearer。自前 OAuth を使わない） |
 | ~~`OS_*`（Swift）~~ | — | **不要**（未設定なら LocalStorage にフォールバック。`UPLOAD_DIR` 任意） |
 
 - DB は **起動時 auto-migrate**（`model.Migrate()`）＝マイグレーション手順不要。
-- **起動後に1回だけ admin をシード**。fresh な production DB は admin が空で、書き戻しが 403 になる。Adminer（https://adminer.ns.trap.jp）か SSH で:
-  ```sql
-  INSERT INTO administrators (trap_id) VALUES ('checkin'), ('<あなたのtraQ_ID>');
-  ```
-  - `checkin` = `SERVICE_USER_TRAP_ID`（Checkin の書き戻し用）。`<あなた>` = Jomon UI を admin で使う人。
-  - スキーマは初回起動の auto-migrate で作られるので、**起動後**に INSERT。
+- **admin シードは env で自動**: `INITIAL_ADMIN_TRAP_IDS`（カンマ区切り）＋ `SERVICE_USER_TRAP_ID` を起動時に administrators 登録（冪等）。**手動 SQL は不要**。
+  - 最低限 `INITIAL_ADMIN_TRAP_IDS=<あなたのtraQ_ID>` を入れれば、自分が Jomon admin・`checkin`（書き戻し用）も自動で admin。
+  - 手動でやる場合（任意）: Adminer（https://adminer.ns.trap.jp）か SSH で `INSERT INTO administrators (trap_id) VALUES ('checkin'), ('<あなた>');`（テーブルは初回起動の auto-migrate 後）。
 
 ---
 
