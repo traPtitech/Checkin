@@ -58,7 +58,9 @@ async function onSubmit() {
   errorMessage.value = null
   result.value = null
   try {
-    const year = form.activityYear.trim()
+    // `<UInput type="number">` coerces v-model to a JS number, so normalize to a
+    // string before trimming (a bare number has no `.trim`). Empty → server default.
+    const year = String(form.activityYear ?? '').trim()
     const res = await $orpc.membership.issueSpecialInvoiceByEmail({
       email: form.email.trim(),
       name: form.name.trim() || undefined,
