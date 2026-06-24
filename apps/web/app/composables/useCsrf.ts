@@ -26,14 +26,24 @@ export function useCsrf() {
     return token
   }
 
-  /** Destroy the session via `POST /logout`, then refresh auth state and go home. */
+  /**
+   * Destroy the session via `POST /logout`. Normally then refresh auth state and
+   * go home. Under NeoShowcase forward-auth the server returns a `redirect` to the
+   * platform logout (`/_oauth/logout`): we must follow it with a full-page
+   * navigation, since the proxy's auth cookie is HttpOnly and only dropped that
+   * way — clearing our session alone would leave the X-Forwarded-User identity.
+   */
   async function logout(): Promise<void> {
     const token = await ensureCsrfToken()
-    await $fetch('/logout', {
+    const res = await $fetch<{ ok: boolean, redirect?: string }>('/logout', {
       method: 'POST',
       credentials: 'same-origin',
       headers: token ? { 'x-csrf-token': token } : {},
     })
+    if (res?.redirect) {
+      window.location.assign(res.redirect)
+      return
+    }
     await useAuthMe().refresh()
     await navigateTo('/')
   }
