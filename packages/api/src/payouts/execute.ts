@@ -9,6 +9,7 @@ import { nextPayoutStatus, type PayoutStatus } from './status'
 import {
   claimPayoutForExecution,
   getPayoutByJomonRef,
+  settlePayoutManually,
   setPayoutJomonWrittenBackAt,
   setPayoutStatus,
   setPayoutUserId,
@@ -229,6 +230,92 @@ export async function executePayout(
   return advancePayout(deps, config, req, { allowFailedRetry: true })
 }
 
+/** Inputs to record a manual bank transfer as a settled `paid` payout. */
+export interface MarkPayoutManuallyPaidInput {
+  jomonRef: string
+  /** Free-text reference note for the manual transfer (e.g. bank ref number). */
+  note?: string
+  /** The accountant (`users.id`) recording it — resolved server-side, may be null. */
+  byUserId?: string | null
+}
+
+/**
+ * Record a MANUAL bank transfer as a settled `paid` payout — WITHOUT issuing a
+ * Stripe transfer. For a payee who cannot complete Connect onboarding, the
+ * accountant pays them by hand and records that fact here. Unlike
+ * {@link executePayout}/{@link processApprovedPayouts}, this does NOT pull Jomon's
+ * approved list: it operates on the LOCAL payout row only (the request may no
+ * longer be approved, or the payee may have no connected account — that is the
+ * whole point). (add-manual-bank-payout D3; spec §手動振込での paid 確定)
+ *
+ * Atomic, idempotent, and race-safe against the Stripe execution claim:
+ *   1. Load the local row; throw if missing (router maps to NOT_FOUND).
+ *   2. Already `paid` ⇒ short-circuit (retry ONLY the write-back if not yet done).
+ *      `processing` ⇒ `needs_review` — never overwrite an in-flight Stripe run.
+ *   3. The store's single conditional UPDATE settles it ONLY from a claimable
+ *      state, sharing `claimPayoutForExecution`'s predicate. If it loses the race
+ *      (`affectedRows === 0`), re-read: now `paid` ⇒ `already_paid` (+ write-back
+ *      retry), else `needs_review`. Never double-pay.
+ *   4. On win, write the settled result back to Jomon via {@link tryWriteBack}
+ *      with `{ status: 'paid', message: note }` — NO `stripeTransferId` (a manual
+ *      payout has none; v1 write-back does not require it).
+ *
+ * `user_id` immutability is preserved: this never sets or relinks the payee
+ * (null is allowed — onboarding may never have started). (spec §本人特定の不変条件)
+ */
+export async function markPayoutManuallyPaid(
+  deps: PayoutDeps,
+  input: MarkPayoutManuallyPaidInput,
+): Promise<PayoutStepResult> {
+  const { jomonRef, note, byUserId } = input
+
+  // 1. Operate on the LOCAL row only — do NOT pull Jomon's approved list.
+  const row = await getPayoutByJomonRef(deps.db, jomonRef)
+  if (!row) {
+    throw new Error(`payout not found for jomon_ref: ${jomonRef}`)
+  }
+
+  // 2. Terminal `paid` ⇒ never re-settle. Retry ONLY the write-back if it never
+  //    recorded (decoupled from settlement, like the Stripe path).
+  if (row.status === 'paid') {
+    if (row.jomonWrittenBackAt === null) {
+      await reattemptWriteBack(deps, row)
+    }
+    return { jomonRef, outcome: 'already_paid', status: 'paid' }
+  }
+  // `processing` ⇒ a Stripe execution is mid-flight; do NOT overwrite it. Leave
+  // it to the winner / an admin (stale `processing` after a crash = 要対応).
+  if (row.status === 'processing') {
+    return { jomonRef, outcome: 'needs_review', status: 'processing' }
+  }
+
+  // 3. Atomically settle from a claimable state. Shares the Stripe claim's
+  //    predicate, so a concurrent Stripe execution and this manual settle can
+  //    never both win — the loser short-circuits without paying twice.
+  const won = await settlePayoutManually(deps.db, { jomonRef, note, byUserId })
+  if (!won) {
+    const fresh = await getPayoutByJomonRef(deps.db, jomonRef)
+    // The other side won and already paid ⇒ short-circuit (retry write-back if needed).
+    if (fresh?.status === 'paid') {
+      if (fresh.jomonWrittenBackAt === null) {
+        await reattemptWriteBack(deps, fresh)
+      }
+      return { jomonRef, outcome: 'already_paid', status: 'paid' }
+    }
+    // Otherwise mid-flight (`processing`) or unexpected ⇒ leave it. Never pay.
+    return { jomonRef, outcome: 'needs_review', status: fresh?.status ?? row.status }
+  }
+
+  // 4. Won the settle — write the (manual) settled result back to Jomon. No
+  //    stripeTransferId: a manual payout has none, and v1 write-back does not
+  //    require it (it only sends `repaid_at`). The note rides along as `message`.
+  //    A write-back failure (incl. v2 unsupported) is isolated by tryWriteBack:
+  //    the payout stays `paid`, the write-back is retried later, never re-paid.
+  await tryWriteBack(deps, jomonRef, { status: 'paid', message: note })
+
+  return { jomonRef, outcome: 'paid', status: 'paid' }
+}
+
 /** Options that gate how `advancePayout` treats certain statuses. */
 interface AdvanceOptions {
   /**
@@ -400,8 +487,20 @@ async function advancePayout(
  * write-back has not yet been recorded. Never re-transfers. A failure (incl. v2
  * unsupported) is isolated by {@link tryWriteBack}: it stays unrecorded for a
  * future retry. (Codex hardening: §retryable write-back avoids re-transfer)
+ *
+ * Reconstructs the write-back result from the row so a retry carries the SAME
+ * payload as the original settle: a Stripe payout re-sends its `stripeTransferId`;
+ * a `manual_bank` payout has no transfer id but re-sends its `manual_paid_note`
+ * as `message` (so the reference note is not lost on retry). (add-manual-bank-payout D4)
  */
 async function reattemptWriteBack(deps: PayoutDeps, row: PayoutRow): Promise<void> {
+  if (row.payoutMethod === 'manual_bank') {
+    await tryWriteBack(deps, row.jomonRef, {
+      status: 'paid',
+      message: row.manualPaidNote ?? undefined,
+    })
+    return
+  }
   await tryWriteBack(deps, row.jomonRef, {
     status: 'paid',
     stripeTransferId: row.stripeTransferId ?? undefined,

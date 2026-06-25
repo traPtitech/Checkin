@@ -133,6 +133,24 @@ export const payouts = mysqlTable('payouts', {
     .default('pending'),
   // Stripe Transfer id, set once the payout succeeds (status `paid`).
   stripeTransferId: varchar('stripe_transfer_id', { length: 255 }),
+  // How this payout was settled. `stripe_connect` is the default Stripe Connect
+  // transfer path (existing rows / existing flow are unchanged). `manual_bank`
+  // marks a payout the accountant settled by a manual bank transfer when the
+  // payee cannot complete Connect onboarding — no Stripe transfer is issued, so
+  // `stripe_transfer_id` stays NULL. (add-manual-bank-payout D1)
+  payoutMethod: mysqlEnum('payout_method', ['stripe_connect', 'manual_bank'])
+    .notNull()
+    .default('stripe_connect'),
+  // When a `manual_bank` payout was confirmed `paid` (NULL for Stripe payouts).
+  manualPaidAt: timestamp('manual_paid_at'),
+  // Free-text reference note for a manual bank transfer (e.g. the bank transfer
+  // reference number). NULL for Stripe payouts. (add-manual-bank-payout D1)
+  manualPaidNote: varchar('manual_paid_note', { length: 255 }),
+  // The accountant (`users.id`) who recorded the manual transfer. Resolved from
+  // the server session, never client input. NULL when it could not be resolved
+  // (traQ-only admin without a linked user) — the audit then rests on
+  // `manual_paid_at` + `manual_paid_note`. (add-manual-bank-payout D1)
+  manualPaidBy: varchar('manual_paid_by', { length: 36 }).references(() => users.id),
   // When the settled result was successfully written back to Jomon (NULL until
   // then). Decouples the write-back from the transfer: a transfer can succeed
   // (`paid`) while the write-back fails, so a `paid` re-run with a NULL value

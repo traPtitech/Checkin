@@ -3,6 +3,9 @@ import { and, eq, inArray } from 'drizzle-orm'
 import { schema, type Database } from '@checkin/db'
 import type { PayoutStatus } from './status'
 
+/** How a payout was settled: a Stripe Connect transfer or a manual bank transfer. */
+export type PayoutMethod = 'stripe_connect' | 'manual_bank'
+
 /** A payout row as the domain reads it (Stripe/Jomon-type-free). */
 export interface PayoutRow {
   id: string
@@ -14,6 +17,14 @@ export interface PayoutRow {
   stripeTransferId: string | null
   /** When the settled result was written back to Jomon, or null if not yet. */
   jomonWrittenBackAt: Date | null
+  /** How this payout was settled (`stripe_connect` default / `manual_bank`). */
+  payoutMethod: PayoutMethod
+  /** Manual bank transfer reference note (NULL for Stripe payouts). */
+  manualPaidNote: string | null
+  /** When a `manual_bank` payout was confirmed paid (NULL for Stripe payouts). */
+  manualPaidAt: Date | null
+  /** The accountant (`users.id`) who recorded the manual transfer, or null. */
+  manualPaidBy: string | null
 }
 
 const PAYOUT_COLUMNS = {
@@ -25,6 +36,10 @@ const PAYOUT_COLUMNS = {
   status: schema.payouts.status,
   stripeTransferId: schema.payouts.stripeTransferId,
   jomonWrittenBackAt: schema.payouts.jomonWrittenBackAt,
+  payoutMethod: schema.payouts.payoutMethod,
+  manualPaidNote: schema.payouts.manualPaidNote,
+  manualPaidAt: schema.payouts.manualPaidAt,
+  manualPaidBy: schema.payouts.manualPaidBy,
 } as const
 
 /** Statuses from which a payout may be claimed for execution (not `paid`/`processing`). */
@@ -149,6 +164,61 @@ export async function claimPayoutForExecution(
 
   // mysql2 returns affectedRows; 1 ⇒ we won the claim, 0 ⇒ already paid/processing.
   // (Same affectedRows extraction as email-verification / identity.)
+  const affected = (result as unknown as { affectedRows?: number })?.affectedRows ?? 0
+  const claimed = Array.isArray(result)
+    ? ((result[0] as { affectedRows?: number })?.affectedRows ?? 0)
+    : affected
+  return claimed === 1
+}
+
+/** Inputs to the atomic store-level manual-paid settle. */
+export interface SettlePayoutManuallyInput {
+  jomonRef: string
+  /** Free-text reference note for the manual transfer (e.g. bank ref number). */
+  note?: string
+  /** The accountant (`users.id`) recording it — resolved server-side, may be null. */
+  byUserId?: string | null
+}
+
+/**
+ * Atomically settle a payout as `paid` via a MANUAL bank transfer (no Stripe
+ * transfer): a single conditional UPDATE flips it to `paid` and records the audit
+ * fields ONLY if it is currently in a claimable state — i.e. NOT already `paid`
+ * or `processing`.
+ *
+ *   UPDATE payouts
+ *      SET status='paid', payout_method='manual_bank', manual_paid_at=NOW(),
+ *          manual_paid_note=?, manual_paid_by=?
+ *    WHERE jomon_ref=? AND status IN ('pending','onboarding_waiting','failed')
+ *
+ * It deliberately shares the SAME `CLAIMABLE_STATUSES` predicate as
+ * {@link claimPayoutForExecution}, so the manual settle and the Stripe execution
+ * claim stay in lockstep: if both race for the same `jomon_ref`, only the one
+ * whose WHERE matches first wins (`affectedRows === 1`) and the loser short-
+ * circuits with `affectedRows === 0` — never a double payout. `stripe_transfer_id`
+ * is NOT touched (a manual payout has none). The orchestration wrapper
+ * `markPayoutManuallyPaid` (execute.ts) adds the Jomon write-back. (add-manual-bank-payout D2)
+ */
+export async function settlePayoutManually(
+  db: Database,
+  input: SettlePayoutManuallyInput,
+): Promise<boolean> {
+  const result = await db
+    .update(schema.payouts)
+    .set({
+      status: 'paid',
+      payoutMethod: 'manual_bank',
+      manualPaidAt: new Date(),
+      manualPaidNote: input.note ?? null,
+      manualPaidBy: input.byUserId ?? null,
+    })
+    .where(and(
+      eq(schema.payouts.jomonRef, input.jomonRef),
+      inArray(schema.payouts.status, CLAIMABLE_STATUSES),
+    ))
+
+  // Same affectedRows extraction as `claimPayoutForExecution`: 1 ⇒ we settled it,
+  // 0 ⇒ it was already paid/processing (claimable WHERE matched nothing).
   const affected = (result as unknown as { affectedRows?: number })?.affectedRows ?? 0
   const claimed = Array.isArray(result)
     ? ((result[0] as { affectedRows?: number })?.affectedRows ?? 0)

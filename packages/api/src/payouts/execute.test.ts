@@ -8,8 +8,8 @@ import type { StripeClient } from '../stripe/client'
 import { StubJomonClient } from '../jomon/stub'
 import { JomonWriteBackUnsupportedError } from '../jomon/http'
 import type { JomonTransferRequest, JomonWriteBackResult } from '../jomon/types'
-import { executePayout, processApprovedPayouts, type PayoutExecuteConfig } from './execute'
-import { getPayoutByJomonRef, upsertPayoutByJomonRef } from './store'
+import { executePayout, markPayoutManuallyPaid, processApprovedPayouts, type PayoutExecuteConfig } from './execute'
+import { getPayoutByJomonRef, settlePayoutManually, upsertPayoutByJomonRef } from './store'
 
 /**
  * DB-backed tests for the payout store + orchestration. They run against the
@@ -482,5 +482,309 @@ describe('processApprovedPayouts (orchestration)', () => {
     const badRow = await getPayoutByJomonRef(db, badRef)
     expect(badRow?.status).toBe('paid')
     expect(badRow?.jomonWrittenBackAt).toBeNull()
+  })
+})
+
+describe('markPayoutManuallyPaid (manual bank transfer settle)', () => {
+  /** Seed a payout row at a chosen status without touching Stripe/Jomon. */
+  async function seedRow(
+    ref: string,
+    status: 'pending' | 'onboarding_waiting' | 'failed' | 'paid' | 'processing',
+    extra: Partial<{ userId: string | null, stripeTransferId: string | null, jomonWrittenBackAt: Date | null }> = {},
+  ): Promise<void> {
+    refs.push(ref)
+    await upsertPayoutByJomonRef(db, { jomonRef: ref, amount: 4000, currency: 'jpy' })
+    await db.update(schema.payouts)
+      .set({ status, ...extra })
+      .where(eq(schema.payouts.jomonRef, ref))
+  }
+
+  it.each(['pending', 'onboarding_waiting', 'failed'] as const)(
+    'settles a %s payout as paid (manual_bank) WITHOUT a Stripe transfer and writes back',
+    async (status) => {
+      if (!available) {
+        return
+      }
+      const ref = `jmn-manual-${status}-${tag}`
+      await seedRow(ref, status, { userId: null })
+      const jomon = new StubJomonClient()
+
+      // transferOk:false proves no Stripe transfer is attempted (it would throw).
+      const result = await markPayoutManuallyPaid(
+        { db, stripe: fakeStripe({ transferOk: false }), jomon },
+        { jomonRef: ref, note: 'bank ref 12345', byUserId: null },
+      )
+      expect(result.outcome).toBe('paid')
+      expect(result.status).toBe('paid')
+
+      const row = await getPayoutByJomonRef(db, ref)
+      expect(row?.status).toBe('paid')
+      expect(row?.payoutMethod).toBe('manual_bank')
+      expect(row?.manualPaidNote).toBe('bank ref 12345')
+      expect(row?.manualPaidAt).toBeInstanceOf(Date)
+      // No Stripe transfer id for a manual payout.
+      expect(row?.stripeTransferId).toBeNull()
+      // Settled result written back to Jomon as paid, with the note, no transfer id.
+      expect(jomon.writeBacks).toEqual([
+        { jomonRef: ref, result: { status: 'paid', message: 'bank ref 12345' } },
+      ])
+    },
+  )
+
+  it('works when userId is null and never relinks a payee', async () => {
+    if (!available) {
+      return
+    }
+    const ref = `jmn-manual-nulluser-${tag}`
+    await seedRow(ref, 'onboarding_waiting', { userId: null })
+    const jomon = new StubJomonClient()
+
+    const result = await markPayoutManuallyPaid(
+      { db, stripe: fakeStripe({ transferOk: false }), jomon },
+      { jomonRef: ref, byUserId: null },
+    )
+    expect(result.outcome).toBe('paid')
+
+    const row = await getPayoutByJomonRef(db, ref)
+    expect(row?.status).toBe('paid')
+    // userId stays null — manual settle does not invent/relink a payee.
+    expect(row?.userId).toBeNull()
+  })
+
+  it('rejects a paid payout (short-circuits as already_paid, no double pay)', async () => {
+    if (!available) {
+      return
+    }
+    const ref = `jmn-manual-paid-${tag}`
+    // Already paid via Stripe, write-back recorded.
+    await seedRow(ref, 'paid', { stripeTransferId: 'tr_stripe', jomonWrittenBackAt: new Date() })
+    const jomon = new StubJomonClient()
+
+    const result = await markPayoutManuallyPaid(
+      { db, stripe: fakeStripe({ transferOk: false }), jomon },
+      { jomonRef: ref, note: 'should not apply' },
+    )
+    expect(result.outcome).toBe('already_paid')
+
+    const row = await getPayoutByJomonRef(db, ref)
+    // Untouched: still a Stripe payout, no manual fields, no re-write-back.
+    expect(row?.payoutMethod).toBe('stripe_connect')
+    expect(row?.stripeTransferId).toBe('tr_stripe')
+    expect(row?.manualPaidAt).toBeNull()
+    expect(jomon.writeBacks).toHaveLength(0)
+  })
+
+  it('rejects a processing payout (needs_review, never overwrites an in-flight Stripe run)', async () => {
+    if (!available) {
+      return
+    }
+    const ref = `jmn-manual-proc-${tag}`
+    await seedRow(ref, 'processing')
+    const jomon = new StubJomonClient()
+
+    const result = await markPayoutManuallyPaid(
+      { db, stripe: fakeStripe({ transferOk: false }), jomon },
+      { jomonRef: ref, note: 'x' },
+    )
+    expect(result.outcome).toBe('needs_review')
+    expect(result.status).toBe('processing')
+
+    const row = await getPayoutByJomonRef(db, ref)
+    // Unchanged — the manual path must not touch an in-flight Stripe execution.
+    expect(row?.status).toBe('processing')
+    expect(row?.payoutMethod).toBe('stripe_connect')
+    expect(jomon.writeBacks).toHaveLength(0)
+  })
+
+  it('throws NOT_FOUND-style error when the payout row is missing', async () => {
+    if (!available) {
+      return
+    }
+    const jomon = new StubJomonClient()
+    await expect(markPayoutManuallyPaid(
+      { db, stripe: fakeStripe(), jomon },
+      { jomonRef: `jmn-manual-missing-${tag}`, note: 'x' },
+    )).rejects.toThrow(/payout not found/i)
+  })
+
+  it('never double-pays when racing a Stripe claim: the manual settle loses and short-circuits', async () => {
+    if (!available) {
+      return
+    }
+    const ref = `jmn-manual-race-${tag}`
+    await seedRow(ref, 'onboarding_waiting', { userId: null })
+    const jomon = new StubJomonClient()
+
+    // Simulate the Stripe side winning the claim FIRST: the store's conditional
+    // UPDATE shares the claimable predicate, so once the row is `paid` the manual
+    // settle's WHERE no longer matches (affectedRows=0) and it short-circuits.
+    await db.update(schema.payouts)
+      .set({ status: 'paid', stripeTransferId: 'tr_stripe_won', jomonWrittenBackAt: new Date() })
+      .where(eq(schema.payouts.jomonRef, ref))
+
+    const result = await markPayoutManuallyPaid(
+      { db, stripe: fakeStripe({ transferOk: false }), jomon },
+      { jomonRef: ref, note: 'late manual' },
+    )
+    // The manual path read `onboarding_waiting` first, then the store UPDATE lost
+    // the race; re-read shows `paid` ⇒ already_paid, NOT a second payment.
+    expect(result.outcome).toBe('already_paid')
+
+    const row = await getPayoutByJomonRef(db, ref)
+    expect(row?.payoutMethod).toBe('stripe_connect')
+    expect(row?.stripeTransferId).toBe('tr_stripe_won')
+    expect(row?.manualPaidAt).toBeNull()
+  })
+
+  it('store settlePayoutManually returns false (no-op) for paid/processing rows', async () => {
+    if (!available) {
+      return
+    }
+    const paidRef = `jmn-store-paid-${tag}`
+    const procRef = `jmn-store-proc-${tag}`
+    await seedRow(paidRef, 'paid', { stripeTransferId: 'tr_x' })
+    await seedRow(procRef, 'processing')
+
+    expect(await settlePayoutManually(db, { jomonRef: paidRef })).toBe(false)
+    expect(await settlePayoutManually(db, { jomonRef: procRef })).toBe(false)
+
+    // A claimable row settles (returns true) and records the audit fields.
+    const okRef = `jmn-store-ok-${tag}`
+    await seedRow(okRef, 'failed')
+    expect(await settlePayoutManually(db, { jomonRef: okRef, note: 'n', byUserId: null })).toBe(true)
+    const okRow = await getPayoutByJomonRef(db, okRef)
+    expect(okRow?.status).toBe('paid')
+    expect(okRow?.payoutMethod).toBe('manual_bank')
+    expect(okRow?.manualPaidNote).toBe('n')
+  })
+
+  it('isolates a write-back failure: the payout stays paid and is left for retry', async () => {
+    if (!available) {
+      return
+    }
+    const ref = `jmn-manual-wbfail-${tag}`
+    await seedRow(ref, 'pending')
+
+    class FlakyJomon extends StubJomonClient {
+      override async writeBackResult(): Promise<void> {
+        throw new Error('jomon write-back boom')
+      }
+    }
+    const jomon = new FlakyJomon()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const result = await markPayoutManuallyPaid(
+      { db, stripe: fakeStripe({ transferOk: false }), jomon },
+      { jomonRef: ref, note: 'wb fail' },
+    )
+    // Settle succeeded; the write-back failure is isolated (logged, not thrown).
+    expect(result.outcome).toBe('paid')
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+
+    const row = await getPayoutByJomonRef(db, ref)
+    expect(row?.status).toBe('paid')
+    expect(row?.payoutMethod).toBe('manual_bank')
+    // Write-back unrecorded ⇒ retried later (never re-settled).
+    expect(row?.jomonWrittenBackAt).toBeNull()
+  })
+
+  it('retries ONLY the write-back for an already manual-paid row whose write-back never recorded', async () => {
+    if (!available) {
+      return
+    }
+    const ref = `jmn-manual-wbretry-${tag}`
+    // Already manually paid, but write-back not recorded (jomonWrittenBackAt NULL).
+    await seedRow(ref, 'paid', { jomonWrittenBackAt: null })
+    await db.update(schema.payouts)
+      .set({ payoutMethod: 'manual_bank', manualPaidNote: 'prior note', manualPaidAt: new Date() })
+      .where(eq(schema.payouts.jomonRef, ref))
+    const jomon = new StubJomonClient()
+
+    const result = await markPayoutManuallyPaid(
+      { db, stripe: fakeStripe({ transferOk: false }), jomon },
+      { jomonRef: ref, note: 'ignored on re-run' },
+    )
+    expect(result.outcome).toBe('already_paid')
+
+    // Re-attempted write-back exactly once: NO stripeTransferId (manual row), and
+    // the STORED note is re-sent as `message` (the retry must not drop the note).
+    expect(jomon.writeBacks).toEqual([
+      { jomonRef: ref, result: { status: 'paid', message: 'prior note' } },
+    ])
+    const row = await getPayoutByJomonRef(db, ref)
+    expect(row?.jomonWrittenBackAt).toBeInstanceOf(Date)
+    // The note is NOT overwritten on an already-paid short-circuit.
+    expect(row?.manualPaidNote).toBe('prior note')
+  })
+
+  it('preserves the manual note across a failed-then-retried write-back', async () => {
+    if (!available) {
+      return
+    }
+    const ref = `jmn-manual-wbnote-${tag}`
+    await seedRow(ref, 'pending')
+
+    // A stub whose write-back fails on the FIRST call (the initial settle) and
+    // succeeds on the second (the retry). Records every attempted payload.
+    class FailFirstJomon extends StubJomonClient {
+      attempts = 0
+      override async writeBackResult(jomonRef: string, result: JomonWriteBackResult): Promise<void> {
+        this.attempts += 1
+        if (this.attempts === 1) {
+          throw new Error('jomon write-back boom (first attempt)')
+        }
+        return super.writeBackResult(jomonRef, result)
+      }
+    }
+    const jomon = new FailFirstJomon()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    // 1. Initial settle: paid succeeds, but the write-back fails (isolated).
+    const first = await markPayoutManuallyPaid(
+      { db, stripe: fakeStripe({ transferOk: false }), jomon },
+      { jomonRef: ref, note: 'bank ref ABCDEF', byUserId: null },
+    )
+    expect(first.outcome).toBe('paid')
+    const afterFirst = await getPayoutByJomonRef(db, ref)
+    expect(afterFirst?.status).toBe('paid')
+    expect(afterFirst?.jomonWrittenBackAt).toBeNull() // unrecorded ⇒ retried later
+    expect(jomon.writeBacks).toHaveLength(0) // first attempt threw, recorded nothing
+
+    // 2. Re-run on the already-paid row: retries ONLY the write-back, re-sending
+    //    the STORED note (proving the retry path does not drop it).
+    const second = await markPayoutManuallyPaid(
+      { db, stripe: fakeStripe({ transferOk: false }), jomon },
+      { jomonRef: ref, note: 'a different note on re-run' },
+    )
+    expect(second.outcome).toBe('already_paid')
+    expect(jomon.writeBacks).toEqual([
+      { jomonRef: ref, result: { status: 'paid', message: 'bank ref ABCDEF' } },
+    ])
+    warn.mockRestore()
+
+    const row = await getPayoutByJomonRef(db, ref)
+    expect(row?.jomonWrittenBackAt).toBeInstanceOf(Date)
+    expect(row?.manualPaidNote).toBe('bank ref ABCDEF')
+  })
+
+  it('exposes manualPaidBy on the row DTO for the UI', async () => {
+    if (!available) {
+      return
+    }
+    const ref = `jmn-manual-by-${tag}`
+    // Seed a real payee so the FK on manual_paid_by is satisfied.
+    const payee = await makePayee('manualby', 'none')
+    await seedRow(ref, 'failed')
+    const jomon = new StubJomonClient()
+
+    await markPayoutManuallyPaid(
+      { db, stripe: fakeStripe({ transferOk: false }), jomon },
+      { jomonRef: ref, note: 'n', byUserId: payee.id },
+    )
+    const row = await getPayoutByJomonRef(db, ref)
+    expect(row?.payoutMethod).toBe('manual_bank')
+    expect(row?.manualPaidBy).toBe(payee.id)
+    expect(row?.manualPaidAt).toBeInstanceOf(Date)
   })
 })

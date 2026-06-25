@@ -6,7 +6,7 @@ definePageMeta({ layout: 'default' })
 
 const { $orpc } = useNuxtApp()
 const { data: me } = useAuthMe()
-const { formatAmount } = useFormatters()
+const { formatAmount, formatDateTime } = useFormatters()
 
 // Server `adminProc` is the real authz; this gate is for navigation/UX only.
 const admin = computed(() => me.value?.admin ?? false)
@@ -160,6 +160,81 @@ async function onExecute(jomonRef: string) {
     next.delete(jomonRef)
     executing.value = next
   }
+}
+
+// --- Per-row manual bank transfer (markManuallyPaid) --------------------------
+// Statuses on which the action is offered (mirrors the server's CLAIMABLE set);
+// `paid`/`processing` rows never see the action (spec §paid/processing 非表示).
+const MANUAL_PAYABLE: PayoutStatus[] = ['pending', 'onboarding_waiting', 'failed']
+function canMarkManuallyPaid(s: string): boolean {
+  return (MANUAL_PAYABLE as string[]).includes(s)
+}
+
+const markingPaid = ref<Set<string>>(new Set())
+const markPaidResult = ref<Record<string, Record<string, unknown>>>({})
+const markPaidError = ref<Record<string, string>>({})
+
+// Confirmation dialog state: which row's confirm is open + its reference note.
+// Cancelling closes the dialog WITHOUT calling the API. (spec §確認なしには確定しない)
+const confirmOpen = ref(false)
+const confirmRef = ref<string | null>(null)
+const confirmNote = ref('')
+
+function openMarkPaidConfirm(jomonRef: string) {
+  // Do not re-open while an in-flight settle for this row is running.
+  if (markingPaid.value.has(jomonRef)) {
+    return
+  }
+  confirmRef.value = jomonRef
+  confirmNote.value = ''
+  markPaidError.value = withoutKey(markPaidError.value, jomonRef)
+  confirmOpen.value = true
+}
+
+function cancelMarkPaidConfirm() {
+  // Explicit cancel: never sends, just clears the dialog.
+  confirmOpen.value = false
+  confirmRef.value = null
+  confirmNote.value = ''
+}
+
+async function onMarkManuallyPaid(jomonRef: string, note: string) {
+  if (markingPaid.value.has(jomonRef)) {
+    return
+  }
+  markingPaid.value = new Set(markingPaid.value).add(jomonRef)
+  markPaidError.value = withoutKey(markPaidError.value, jomonRef)
+  try {
+    const trimmed = note.trim()
+    const result = await $orpc.payouts.markManuallyPaid({
+      jomonRef,
+      // Omit an empty note so the optional field stays undefined server-side.
+      ...(trimmed ? { note: trimmed } : {}),
+    })
+    markPaidResult.value = { ...markPaidResult.value, [jomonRef]: result as unknown as Record<string, unknown> }
+    await loadList()
+  }
+  catch (e) {
+    markPaidError.value = { ...markPaidError.value, [jomonRef]: errorMessageFor(e) }
+  }
+  finally {
+    const next = new Set(markingPaid.value)
+    next.delete(jomonRef)
+    markingPaid.value = next
+  }
+}
+
+// Confirm in the dialog: capture the ref/note, close the dialog, then send.
+async function confirmMarkPaid() {
+  const jomonRef = confirmRef.value
+  if (!jomonRef) {
+    return
+  }
+  const note = confirmNote.value
+  confirmOpen.value = false
+  confirmRef.value = null
+  confirmNote.value = ''
+  await onMarkManuallyPaid(jomonRef, note)
 }
 
 // --- Per-row onboarding link (createOnboardingLink) ---------------------------
@@ -362,6 +437,9 @@ onMounted(() => {
                 status
               </th>
               <th class="px-3 py-2 font-medium">
+                方法
+              </th>
+              <th class="px-3 py-2 font-medium">
                 transfer ID
               </th>
               <th class="px-3 py-2 font-medium">
@@ -399,6 +477,42 @@ onMounted(() => {
                   {{ row.status }}
                 </UBadge>
               </td>
+              <td class="px-3 py-2">
+                <template v-if="row.payoutMethod === 'manual_bank'">
+                  <UBadge
+                    color="info"
+                    variant="subtle"
+                    size="sm"
+                    icon="i-lucide-banknote"
+                  >
+                    手動振込
+                  </UBadge>
+                  <p
+                    v-if="row.manualPaidNote"
+                    class="mt-1 text-xs text-muted break-all"
+                  >
+                    参照メモ: {{ row.manualPaidNote }}
+                  </p>
+                  <p
+                    v-if="row.manualPaidAt"
+                    class="mt-1 text-xs text-muted"
+                  >
+                    手動 paid 日時: {{ formatDateTime(row.manualPaidAt) }}
+                  </p>
+                  <p
+                    v-if="row.manualPaidBy"
+                    class="mt-1 text-xs text-muted break-all"
+                  >
+                    実行者: <span class="font-mono">{{ row.manualPaidBy }}</span>
+                  </p>
+                </template>
+                <span
+                  v-else
+                  class="text-xs text-muted"
+                >
+                  Stripe
+                </span>
+              </td>
               <td class="px-3 py-2 font-mono text-xs">
                 {{ row.stripeTransferId ?? '—' }}
               </td>
@@ -419,6 +533,21 @@ onMounted(() => {
                       @click="onExecute(row.jomonRef)"
                     >
                       {{ row.status === 'failed' ? '再試行' : '実行' }}
+                    </UButton>
+                    <!-- Manual bank transfer: only for pending/onboarding_waiting/
+                         failed rows (hidden for paid/processing). Opens a confirm
+                         dialog; cancelling never sends. -->
+                    <UButton
+                      v-if="canMarkManuallyPaid(row.status)"
+                      color="info"
+                      variant="subtle"
+                      size="xs"
+                      icon="i-lucide-banknote"
+                      :loading="markingPaid.has(row.jomonRef)"
+                      :disabled="markingPaid.has(row.jomonRef)"
+                      @click="openMarkPaidConfirm(row.jomonRef)"
+                    >
+                      手動振込済みにする
                     </UButton>
                     <template v-if="row.userId">
                       <UButton
@@ -469,6 +598,29 @@ onMounted(() => {
                     </span>
                   </p>
 
+                  <!-- Manual bank transfer result / error (per row). -->
+                  <UAlert
+                    v-if="markPaidError[row.jomonRef]"
+                    color="error"
+                    variant="subtle"
+                    size="sm"
+                    icon="i-lucide-circle-alert"
+                    :title="markPaidError[row.jomonRef]"
+                  />
+                  <p
+                    v-else-if="markPaidResult[row.jomonRef]"
+                    class="text-xs text-muted"
+                  >
+                    手動振込結果:
+                    <span
+                      v-for="(value, key) in markPaidResult[row.jomonRef]"
+                      :key="key"
+                      class="mr-2"
+                    >
+                      {{ key }}={{ String(value) }}
+                    </span>
+                  </p>
+
                   <!-- Onboarding link (display only; do not auto-send/log). -->
                   <div
                     v-if="row.userId && onboardingUrl[row.userId]"
@@ -507,7 +659,7 @@ onMounted(() => {
             </tr>
             <tr v-if="!items.length && !listPending">
               <td
-                colspan="8"
+                colspan="9"
                 class="px-3 py-6 text-center text-muted"
               >
                 表示できる払い戻しがありません。
@@ -516,6 +668,58 @@ onMounted(() => {
           </tbody>
         </table>
       </div>
+
+      <!-- Manual bank transfer confirmation dialog. Shown only when opened from a
+           row action; confirming sends `markManuallyPaid`, cancelling never does.
+           (spec §確認なしには確定しない / §誤確定・二重支払い防止) -->
+      <UModal
+        v-model:open="confirmOpen"
+        title="手動振込済みにする"
+        description="この払い戻しを「手動振込で支払い済み」として記録します。Stripe 送金は行われません。誤確定・二重支払いにご注意ください。"
+        :dismissible="!(confirmRef && markingPaid.has(confirmRef))"
+      >
+        <template #body>
+          <div class="space-y-3">
+            <p class="text-sm text-muted">
+              対象 jomonRef:
+              <span class="font-mono text-xs">{{ confirmRef }}</span>
+            </p>
+            <UFormField
+              label="参照メモ（振込参照番号など・任意）"
+              name="manualPaidNote"
+            >
+              <UTextarea
+                v-model="confirmNote"
+                :rows="3"
+                :maxlength="255"
+                placeholder="例: 銀行振込 参照番号 1234567890"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
+        </template>
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton
+              color="neutral"
+              variant="subtle"
+              :disabled="!!(confirmRef && markingPaid.has(confirmRef))"
+              @click="cancelMarkPaidConfirm"
+            >
+              キャンセル
+            </UButton>
+            <UButton
+              color="info"
+              icon="i-lucide-banknote"
+              :loading="!!(confirmRef && markingPaid.has(confirmRef))"
+              :disabled="!!(confirmRef && markingPaid.has(confirmRef))"
+              @click="confirmMarkPaid"
+            >
+              手動振込済みにする
+            </UButton>
+          </div>
+        </template>
+      </UModal>
     </section>
   </div>
 </template>

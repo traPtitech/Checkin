@@ -252,6 +252,19 @@ describe('JomonV1Client (/api/applications, strict, fail-safe)', () => {
     await client.writeBackResult('app_1:alice', { status: 'failed', message: 'declined' })
     expect(spy).not.toHaveBeenCalled()
   })
+
+  it('writes back a MANUAL paid (no stripeTransferId) — still sends repaid_at', async () => {
+    // A manual bank transfer settles `paid` with no Stripe transfer id; v1
+    // write-back only needs `repaid_at`, so the absence of stripeTransferId must
+    // NOT prevent the repaid write-back. (add-manual-bank-payout D4)
+    const spy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('', { status: 200 }))
+    await client.writeBackResult('app_1:alice', { status: 'paid', message: 'bank ref 999' })
+    expect(spy).toHaveBeenCalledTimes(1)
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://jomon.test/api/applications/app_1/states/repaid/alice')
+    expect(init.method).toBe('PUT')
+    expect(JSON.parse(init.body as string)).toMatchObject({ repaid_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) })
+  })
 })
 
 describe('JomonV2Client (/api/applications, uuid->name, strict)', () => {
@@ -303,6 +316,14 @@ describe('JomonV2Client (/api/applications, uuid->name, strict)', () => {
 
   it('write-back is UNSUPPORTED (throws JomonWriteBackUnsupportedError)', async () => {
     await expect(client.writeBackResult('tgt_1', { status: 'paid', stripeTransferId: 'tr_x' }))
+      .rejects.toBeInstanceOf(JomonWriteBackUnsupportedError)
+  })
+
+  it('manual paid (no stripeTransferId) write-back is also UNSUPPORTED — kept for retry', async () => {
+    // A manual-bank paid result has no stripeTransferId; v2 still has no write-back
+    // API, so it throws Unsupported. The orchestration keeps the payout `paid` and
+    // leaves jomon_written_back_at NULL for retry. (add-manual-bank-payout D4)
+    await expect(client.writeBackResult('tgt_1', { status: 'paid', message: 'bank ref 999' }))
       .rejects.toBeInstanceOf(JomonWriteBackUnsupportedError)
   })
 })

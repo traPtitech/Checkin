@@ -64,6 +64,13 @@
       "when": 1782312508235,
       "tag": "0008_sticky_shiva",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1782344833815,
+      "tag": "0009_unique_shinobi_shaw",
+      "breakpoints": true
     }
   ]
 }

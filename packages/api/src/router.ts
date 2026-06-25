@@ -7,6 +7,7 @@ import {
   sanitizeRedirect,
   createEmailVerification,
   getUserById,
+  getUserByTraqId,
   getOrCreateUserByMailHash,
   linkTraqId,
   setPayoutOnboardingStatus,
@@ -31,7 +32,9 @@ import {
 } from './ledger'
 import {
   executePayout,
+  getPayoutByJomonRef,
   listPayouts,
+  markPayoutManuallyPaid,
   nextOnboardingStatus,
   processApprovedPayouts,
   type PayoutExecuteConfig,
@@ -445,6 +448,44 @@ export const appRouter = {
           { db: context.db, stripe: context.stripe, jomon: context.jomon },
           payoutExecuteConfig(context),
           input.jomonRef,
+        )
+      }),
+
+    /**
+     * Record a MANUAL bank transfer as a settled `paid` payout for a payee who
+     * cannot complete Connect onboarding — WITHOUT issuing a Stripe transfer.
+     * Admin only + `assertCsrf` (it settles the payout and writes back to Jomon).
+     * Only `pending` / `onboarding_waiting` / `failed` rows are settled; `paid` /
+     * `processing` short-circuit. The actor (`manual_paid_by`) is resolved from
+     * the SERVER SESSION (never client input) to prevent spoofing: prefer the
+     * session's `userId`, else resolve the session's `traqId` to a `users.id`
+     * (traQ-only admin whose userId isn't exposed); null when unresolvable.
+     * (add-manual-bank-payout D5; spec §手動振込での paid 確定)
+     */
+    markManuallyPaid: adminProc
+      .input(z.object({
+        jomonRef: z.string().min(1),
+        note: z.string().max(255).optional(),
+      }))
+      .handler(async ({ input, context }) => {
+        context.assertCsrf()
+
+        // Translate a missing row to a precise NOT_FOUND at the route boundary
+        // (mirrors `createOnboardingLink`'s getUserById → ORPCError pattern), so a
+        // bad jomonRef is a 404, not a 500 from the domain's plain throw. The
+        // orchestration still re-reads atomically and is the source of truth.
+        const row = await getPayoutByJomonRef(context.db, input.jomonRef)
+        if (!row) {
+          throw new ORPCError('NOT_FOUND', { message: 'payout not found' })
+        }
+
+        const byUserId = context.session?.userId
+          ?? (context.session?.traqId
+            ? (await getUserByTraqId(context.db, context.session.traqId))?.id ?? null
+            : null)
+        return markPayoutManuallyPaid(
+          { db: context.db, stripe: context.stripe, jomon: context.jomon },
+          { jomonRef: input.jomonRef, note: input.note, byUserId },
         )
       }),
   },
