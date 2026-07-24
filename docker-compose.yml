@@ -1,6 +1,6 @@
 services:
   mariadb:
-    image: mariadb:11
+    image: mariadb:11@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4
     restart: unless-stopped
     ports:
       - "3306:3306"
