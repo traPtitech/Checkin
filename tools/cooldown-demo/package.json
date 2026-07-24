@@ -1,0 +1,8 @@
+{
+  "name": "cooldown-demo",
+  "private": true,
+  "description": "検証用: 公開から7日未満の npm パッケージを厳密指定 (renovate@43.280.2 は 2026-07-24 公開)。pnpm workspace 外なので install はされない",
+  "dependencies": {
+    "renovate": "43.280.2"
+  }
+}
