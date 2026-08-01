@@ -1,7 +1,7 @@
 import { createORPCClient } from '@orpc/client'
 import { RPCLink } from '@orpc/client/fetch'
-import type { RouterClient } from '@orpc/server'
-import type { AppRouter } from '@checkin/api'
+import type { ContractRouterClient } from '@orpc/contract'
+import { contract } from '@checkin/api-contract'
 
 export default defineNuxtPlugin(() => {
   // Resolve an absolute origin so the link works during SSR too.
@@ -11,7 +11,9 @@ export default defineNuxtPlugin(() => {
     url: `${origin}/rpc`,
   })
 
-  const client: RouterClient<AppRouter> = createORPCClient(link)
+  // Typed against the contract, not `@checkin/api`, so the client bundle
+  // never pulls in server-only implementation code (DB driver, handlers).
+  const client: ContractRouterClient<typeof contract> = createORPCClient(link)
 
   return {
     provide: {

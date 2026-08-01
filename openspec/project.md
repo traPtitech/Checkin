@@ -13,8 +13,10 @@ as an OpenSpec proposal (`/opsx:propose`) → apply (`/opsx:apply`) → archive 
 - **Monorepo**: pnpm workspaces (no Turborepo). Packages reference each other with `workspace:*`.
 - **Frontend + server**: Nuxt 4 (`apps/web`). The backend is **not** a separate service — the
   API is hosted inside Nuxt's Nitro server.
-- **API / RPC**: oRPC. Router lives in `packages/api`; the Nitro route `apps/web/server/routes/rpc/[...].ts`
-  mounts it; the typed client is provided by `apps/web/app/plugins/orpc.ts`.
+- **API / RPC**: oRPC, contract-first. The contract (`oc` from `@orpc/contract`) lives in
+  `packages/api-contract`; `packages/api` implements it via `implement(contract)` and is mounted
+  by the Nitro route `apps/web/server/routes/rpc/[...].ts`. The typed client in
+  `apps/web/app/plugins/orpc.ts` links against the contract, not the server implementation.
 - **Database**: MariaDB via Drizzle ORM (`drizzle-orm/mysql2`, dialect `mysql`) in `packages/db`.
   Migrations live in `packages/db/drizzle/` and are committed.
 - **Lint/format**: ESLint flat config (`@nuxt/eslint`, stylistic enabled) at the repo root.
@@ -22,19 +24,24 @@ as an OpenSpec proposal (`/opsx:propose`) → apply (`/opsx:apply`) → archive 
 ## Layout
 
 ```
-apps/web        Nuxt app (UI + Nitro server hosting oRPC)
-packages/api    oRPC router, procedures, request Context
-packages/db     Drizzle schema, MariaDB client, migrations
+apps/web               Nuxt app (UI + Nitro server hosting oRPC)
+packages/api-contract  oRPC contract (procedure input/output/error specs, no implementation)
+packages/api           oRPC router — implements packages/api-contract, request Context
+packages/db            Drizzle schema, MariaDB client, migrations
 ```
 
 ## Conventions
 
-- New oRPC procedures: add to `packages/api/src/router.ts`, grouped by capability
-  (`appRouter.<capability>.<procedure>`). Build them from `pub` (`packages/api/src/orpc.ts`);
-  read DB access via `context.db`.
+- New oRPC procedures: first define the contract in `packages/api-contract/src/`, grouped by
+  capability, using `oc` (`@orpc/contract`) for input/output/error schemas. Then implement it in
+  `packages/api/src/router.ts` (`appRouter.<capability>.<procedure>`), building handlers from
+  `pub` (`packages/api/src/orpc.ts`, `implement(contract).$context<Context>()`); access the DB
+  via `context.db`.
 - New tables: define in `packages/db/src/schema.ts`, then `pnpm db:generate` and commit the
   migration. Never hand-edit generated migration SQL.
-- The client imports `AppRouter` **type-only** — never import server implementation into `apps/web` UI code.
+- The client imports the contract (`@checkin/api-contract`), typed via `ContractRouterClient`
+  from `@orpc/contract` — never import `@checkin/api` (the server implementation) into `apps/web`
+  UI code.
 - Keep the build green: `pnpm lint`, `pnpm typecheck`, `pnpm build`.
 
 ## Local development
