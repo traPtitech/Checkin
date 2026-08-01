@@ -1,7 +1,7 @@
 import { createORPCClient } from '@orpc/client'
 import { RPCLink } from '@orpc/client/fetch'
 import type { ContractRouterClient } from '@orpc/contract'
-import { contract } from '@checkin/api-contract'
+import type { contract } from '@checkin/api-contract'
 
 export default defineNuxtPlugin(() => {
   // Resolve an absolute origin so the link works during SSR too.
