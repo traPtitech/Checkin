@@ -1,5 +1,8 @@
+import { checkoutContract } from './checkout'
 import { healthContract } from './health'
+import { invoicesContract } from './invoices'
 import { pricesContract } from './prices'
+import { productsContract } from './products'
 
 /**
  * アプリケーションコントラクト。実際のプロシージャは機能ごとに OpenSpec の
@@ -9,4 +12,7 @@ import { pricesContract } from './prices'
 export const contract = {
   health: healthContract,
   prices: pricesContract,
+  products: productsContract,
+  invoices: invoicesContract,
+  checkout: checkoutContract,
 }

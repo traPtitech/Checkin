@@ -1,26 +1,17 @@
 import { call } from '@orpc/server'
 import type Stripe from 'stripe'
 import { describe, expect, it } from 'vitest'
-import type { Context } from './orpc'
 import { appRouter } from './router'
+import { stripeFixture, testContext } from './test-utils'
 
-/**
- * prices リソースだけをスタブしたコンテキストを組む。handler は has_more / data /
- * metadata しか触らないため、Stripe の厳密なメソッド型には合わせず unknown で受ける。
- */
+/** prices リソースだけをスタブしたコンテキストを組む。 */
 function makeContext(prices: unknown) {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- prices リソースだけを供給する最小スタブ。handler は db に触れず、stripe も prices しか使わない
-  return { db: {}, stripe: { prices } } as unknown as Context
+  return testContext({ prices })
 }
 
 /** handler が読むフィールドだけ埋めた Price フィクスチャ。metadata 等は上書きできる。 */
 function price(overrides: Partial<Stripe.Price>): Stripe.Price {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- Price 全体は再現せず、handler が参照するフィールドだけ供給する
-  return {
-    id: 'price_x',
-    metadata: {},
-    ...overrides,
-  } as unknown as Stripe.Price
+  return stripeFixture<Stripe.Price>(overrides)
 }
 
 describe('prices.list', () => {
@@ -115,5 +106,29 @@ describe('prices.retrieve', () => {
     const result = await call(appRouter.prices.retrieve, { id: 'price_x' }, { context })
 
     expect(result.metadata).toStrictEqual({ traq_id: 'bob' })
+  })
+})
+
+describe('prices.update', () => {
+  it('active と metadata を Stripe に渡し、結果の metadata を traq_id だけに絞る', async () => {
+    let capturedId: unknown
+    let capturedParams: unknown
+    const context = makeContext({
+      update: (id: unknown, params: unknown) => {
+        capturedId = id
+        capturedParams = params
+        return Promise.resolve(price({ metadata: { traq_id: 'carol', internal: 'secret' } }))
+      },
+    })
+
+    const result = await call(
+      appRouter.prices.update,
+      { id: 'price_x', active: false, metadata: { traq_id: 'carol' } },
+      { context },
+    )
+
+    expect(capturedId).toBe('price_x')
+    expect(capturedParams).toStrictEqual({ active: false, metadata: { traq_id: 'carol' } })
+    expect(result.metadata).toStrictEqual({ traq_id: 'carol' })
   })
 })

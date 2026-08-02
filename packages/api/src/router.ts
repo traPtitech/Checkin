@@ -1,5 +1,8 @@
+import { checkoutRouter } from './checkout'
+import { invoicesRouter } from './invoices'
 import { pub } from './orpc'
 import { pricesRouter } from './prices'
+import { productsRouter } from './products'
 
 /**
  * アプリケーションルーター — `@checkin/api-contract` を実装する。
@@ -12,4 +15,7 @@ export const appRouter = pub.router({
     check: pub.health.check.handler(() => ({ ok: true, timestamp: new Date().toISOString() })),
   },
   prices: pricesRouter,
+  products: productsRouter,
+  invoices: invoicesRouter,
+  checkout: checkoutRouter,
 })
