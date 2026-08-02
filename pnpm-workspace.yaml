@@ -1,3 +1,9 @@
 packages:
   - apps/*
   - packages/*
+
+# サプライチェーン対策: 公開から 7 日未満のバージョンを install しない
+# (https://github.com/traPtitech/gha-security 参照。不要になったら削除してよい)
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  - "@traptitech/*"
