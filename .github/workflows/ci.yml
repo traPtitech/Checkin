@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
 
+# Minimal token scope: every job here only reads the repo (checkout + scan +
+# build). Set explicitly so the workflow never inherits write access it doesn't
+# use. Grant a narrower per-job permission only if a job later needs one.
+permissions:
+  contents: read
+
 jobs:
   gitleaks:
     name: gitleaks
