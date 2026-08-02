@@ -15,6 +15,9 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # @types/node は Node.js のバージョンに合わせて手動で更新するため対象外にする
+      - dependency-name: "@types/node"
 
   - package-ecosystem: github-actions
     directory: /
