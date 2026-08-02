@@ -22,9 +22,12 @@ server implementation — is provided by `apps/web/app/plugins/orpc.ts`.
 
 ## Requirements
 
-- Node.js 22 (`.nvmrc`)
-- pnpm 10+
+- Node.js 24 (`.nvmrc`)
+- pnpm 11+
 - Docker (for local MariaDB)
+- [gitleaks](https://github.com/gitleaks/gitleaks#installing) — the pre-commit hook refuses to
+  commit without it. CI scans too, but only after a push already reached GitHub, which is too
+  late for a leaked secret.
 
 ## Getting started
 
@@ -48,7 +51,9 @@ missing `DATABASE_URL` surfaces as a 500 on the home page — copy `.env` first.
 | `pnpm dev`         | Run the Nuxt app in dev mode                 |
 | `pnpm build`       | Build the Nuxt app (incl. Nitro server)      |
 | `pnpm lint`        | ESLint across the monorepo                   |
+| `pnpm knip`        | Find unused files, exports, and dependencies |
 | `pnpm typecheck`   | Type-check every package                     |
+| `pnpm test`        | Run the vitest suite                         |
 | `pnpm db:generate` | Generate a Drizzle migration from the schema |
 | `pnpm db:migrate`  | Apply pending migrations                     |
 | `pnpm db:push`     | Push schema directly (dev only)              |

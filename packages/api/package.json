@@ -12,10 +12,11 @@
   "dependencies": {
     "@checkin/api-contract": "workspace:*",
     "@checkin/db": "workspace:*",
-    "@orpc/server": "^1.14.0"
+    "@orpc/server": "^1.14.13"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.9.0"
+    "@types/node": "^24.13.3",
+    "typescript": "^6.0.0",
+    "vitest": "^4.1.10"
   }
 }

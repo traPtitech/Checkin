@@ -14,15 +14,15 @@
     "@checkin/api": "workspace:*",
     "@checkin/api-contract": "workspace:*",
     "@checkin/db": "workspace:*",
-    "@orpc/client": "^1.14.0",
-    "@orpc/contract": "^1.14.0",
-    "@orpc/server": "^1.14.0",
-    "nuxt": "^4.4.0",
-    "vue": "^3.5.0"
+    "@orpc/client": "^1.14.13",
+    "@orpc/contract": "^1.14.13",
+    "@orpc/server": "^1.14.13",
+    "nuxt": "^4.4.8",
+    "vue": "^3.5.40"
   },
   "devDependencies": {
     "@nuxt/eslint": "^1.16.0",
-    "typescript": "^5.9.0",
-    "vue-tsc": "^3.3.0"
+    "typescript": "^6.0.0",
+    "vue-tsc": "^3.3.9"
   }
 }

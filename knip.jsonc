@@ -1,0 +1,20 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  "ignore": ["**/.*/**"],
+  "workspaces": {
+    ".": {},
+    "apps/web": {
+      "ignoreDependencies": [
+        // Used implicitly by Vue SFC compilation (runtime helpers, compiler
+        // macros) and by `nuxt typecheck`'s internal vue-tsc invocation.
+        // Knip's built-in Vue compiler only extracts import statements, so
+        // it can't see these — see https://knip.dev/reference/faq
+        "vue",
+        "vue-tsc"
+      ]
+    },
+    "packages/api": {},
+    "packages/api-contract": {},
+    "packages/db": {}
+  }
+}

@@ -5,7 +5,48 @@ on:
     branches: [main]
   pull_request:
 
+# Minimal token scope: every job here only reads the repo (checkout + scan +
+# build). Set explicitly so the workflow never inherits write access it doesn't
+# use. Grant a narrower per-job permission only if a job later needs one.
+permissions:
+  contents: read
+
 jobs:
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      # gitleaks-action requires a paid GITLEAKS_LICENSE for organization-owned
+      # repos (traPtitech is an org) regardless of repo visibility, so run the
+      # OSS CLI directly instead -- same tool the pre-commit hook uses locally,
+      # no license needed.
+      #
+      # container runs as root and the workspace is owned by the runner user,
+      # so inject a safe.directory config via env or git refuses to read the
+      # repo -- silently: gitleaks reports "0 commits scanned, no leaks found"
+      # instead of erroring, which would look like a clean pass while actually
+      # having scanned nothing.
+      #
+      # image is pinned by content-addressable digest, not a mutable tag
+      # (same reasoning as actions/*@<commit-sha>). Refresh the digest with:
+      #   docker buildx imagetools inspect ghcr.io/gitleaks/gitleaks:v8.30.1
+      #
+      # scans full git history (fetch-depth: 0 above) since this is the
+      # backstop for anyone who skipped/bypassed the pre-commit hook; the
+      # local hook only scans staged changes (`--staged --pre-commit`, no
+      # --verbose) since it runs on every commit and needs to stay fast.
+      - uses: docker://ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f # v8.30.1
+        env:
+          GIT_CONFIG_COUNT: "1"
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: /github/workspace
+        with:
+          args: git --redact --verbose --no-banner /github/workspace
+
   ci:
     runs-on: ubuntu-latest
     steps:
@@ -15,7 +56,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -24,8 +65,19 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Knip
+        # knip imports drizzle.config.ts to analyze it, which now throws if
+        # DATABASE_URL is unset (see packages/db/drizzle.config.ts) -- a
+        # dummy value is enough since nothing here actually connects.
+        env:
+          DATABASE_URL: mysql://user:pass@localhost:3306/checkin
+        run: pnpm knip
+
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
 
       - name: Build
         run: pnpm build

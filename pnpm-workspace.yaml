@@ -1,3 +1,19 @@
 packages:
   - apps/*
   - packages/*
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+
+# @nuxt/eslint declares its own loose "@nuxt/kit": "^4.4.8" dependency,
+# independent of the one `nuxt` itself pins. pnpm resolves these as separate
+# peer-dependency instances, so @nuxt/kit ends up in two versions -- which
+# surfaces as ESLint type-aware lint failures on server routes (the two
+# instances resolve different `h3` types). Force a single version to match
+# `nuxt`'s pin below.
+#
+# Remove this once @nuxt/eslint scopes its @nuxt/kit range to match whatever
+# `nuxt` version is installed (verify with `pnpm why @nuxt/kit` -- should
+# show exactly one version without this override).
+overrides:
+  '@nuxt/kit': 4.4.8

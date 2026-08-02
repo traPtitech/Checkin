@@ -10,11 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@orpc/contract": "^1.14.0",
-    "zod": "^4.0.0"
+    "@orpc/contract": "^1.14.13",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.9.0"
+    "@types/node": "^24.13.3",
+    "typescript": "^6.0.0"
   }
 }
