@@ -13,9 +13,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+      # gitleaks-action requires a paid GITLEAKS_LICENSE for organization-owned
+      # repos (traPtitech is an org) regardless of repo visibility, so install
+      # and run the OSS CLI directly instead -- same tool the pre-commit hook
+      # uses locally, no license needed.
+      - name: Install gitleaks
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -sSfLo gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+          rm gitleaks.tar.gz gitleaks
+
+      - name: Run gitleaks
+        run: gitleaks detect --source . --redact --verbose
 
   ci:
     runs-on: ubuntu-latest

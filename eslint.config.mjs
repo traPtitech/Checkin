@@ -28,7 +28,11 @@ export default withNuxt({
     // Allow warn/error for real diagnostics; log/debug/info shouldn't reach a commit.
     'no-console': ['error', { allow: ['warn', 'error'] }],
   },
-}, ...pluginVueA11y.configs['flat/recommended'].map(config => ({
-  ...config,
+},
+// flat/recommended[0] is global setup (plugin registration + languageOptions,
+// no rules) and should stay unscoped; only [1] carries the a11y rules and
+// needs scoping to apps/web so it doesn't apply outside the Nuxt app.
+pluginVueA11y.configs['flat/recommended'][0], {
+  ...pluginVueA11y.configs['flat/recommended'][1],
   files: ['apps/web/**/*.vue'],
-})))
+})
