@@ -7,12 +7,10 @@ export default defineEventHandler(async (event) => {
   const { matched, response } = await handler.handle(toWebRequest(event), {
     prefix: '/rpc',
     context: {
-      // mysql2 のプールは初回利用時に1つだけ作成され、サーバーインスタンス
-      // ごとにキャッシュされる(useDatabase 参照)。プール自体の接続は遅延する。
-      // なお oRPC はリクエストのたびに context.db を参照するため、
-      // health.check のような DB 不要なプロシージャでも DATABASE_URL の設定が
-      // 必須になる — このゲッターは生成を遅延させるだけで、プロシージャ
-      // ごとの条件分岐は行わない。
+      // データベースハンドルの生成・キャッシュ戦略は useDatabase を参照。
+      // oRPC はリクエストのたびに context.db を参照するため、health.check
+      // のような DB 不要なプロシージャでも DATABASE_URL の設定が必須になる
+      // — このゲッターは生成を遅延させるだけで、プロシージャごとの条件分岐は行わない。
       get db() {
         return useDatabase()
       },

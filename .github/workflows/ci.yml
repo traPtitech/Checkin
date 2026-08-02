@@ -39,9 +39,8 @@ jobs:
       #
       # (上の fetch-depth: 0 により) git の全履歴をスキャンする。これは
       # pre-commit フックをスキップ/回避した人向けの最終防衛ラインだから。
-      # ローカルフックはステージされた変更のみをスキャンし(`--staged
-      # --pre-commit`、--verbose なし)、コミットのたびに実行されるため
-      # 高速さを保つ必要がある。
+      # ローカルフックはコミットのたびに高速に実行できるよう、ステージされた
+      # 変更のみをスキャンする(具体的な実行方法は .husky/pre-commit 参照)。
       - uses: docker://ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f # v8.30.1
         env:
           GIT_CONFIG_COUNT: "1"

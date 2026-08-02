@@ -34,10 +34,10 @@ export default withNuxt({
     'eqeqeq': 'error',
   },
 }, {
-  // 型を考慮したルールは、Nuxt の typescript 設定が TS パーサーをアタッチする
-  // 箇所(nuxt/typescript/rules、これらと同じ拡張子にスコープされる)でのみ
-  // 解決される -- eslint.config.mjs のような設定ファイルはプレーンな
-  // espree のままで、チェック対象となる型情報を持たない。
+  // 型を考慮したルールは、Nuxt が生成する設定のうち TS パーサーがアタッチ
+  // されている箇所(これらと同じ拡張子にスコープされる)でのみ解決される
+  // -- eslint.config.mjs のような設定ファイルはプレーンな espree のままで、
+  // チェック対象となる型情報を持たない。
   files: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts', '**/*.vue'],
   rules: {
     // `!` は実行時のチェックを伴わずに型チェッカーを回避する。使用箇所で
@@ -57,11 +57,12 @@ export default withNuxt({
     '@typescript-eslint/prefer-optional-chain': 'error',
   },
 },
-// flat/recommended の両エントリとも apps/web にスコープする必要がある: [0] は
-// ルールだけの設定ではなく languageOptions.globals にブラウザのグローバル
-// 一式(window, document, ...)も設定してしまい、スコープしなければ
-// Vue でない全パッケージ(packages/api, packages/db, ...)に漏れ出してしまう。
-// [1] は実際の a11y ルールと vue-eslint-parser を担う。
+// flat/recommended には、ルールだけでなく languageOptions.globals に
+// ブラウザのグローバル一式(window, document, ...)も設定するエントリと、
+// 実際の a11y ルールと vue-eslint-parser を担うエントリが含まれる。
+// 両方とも apps/web にスコープしないと、ブラウザグローバルが Vue でない
+// 全パッケージ(packages/api, packages/db, ...)に漏れ出してしまう。
+// (eslint-plugin-vuejs-accessibility のバージョンアップ時は配列構成を再確認すること)
 ...pluginVueA11y.configs['flat/recommended'].map(config => ({
   ...config,
   files: ['apps/web/**/*.vue'],
