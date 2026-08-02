@@ -25,8 +25,9 @@ server implementation — is provided by `apps/web/app/plugins/orpc.ts`.
 - Node.js 24 (`.nvmrc`)
 - pnpm 11+
 - Docker (for local MariaDB)
-- [gitleaks](https://github.com/gitleaks/gitleaks#installing) (optional locally — the pre-commit
-  hook scans staged changes for secrets when it's installed, and CI always runs it regardless)
+- [gitleaks](https://github.com/gitleaks/gitleaks#installing) — the pre-commit hook refuses to
+  commit without it. CI scans too, but only after a push already reached GitHub, which is too
+  late for a leaked secret.
 
 ## Getting started
 

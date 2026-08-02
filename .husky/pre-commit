@@ -1,8 +1,9 @@
-if command -v gitleaks >/dev/null 2>&1; then
-  gitleaks git --staged --pre-commit --redact
-else
-  echo "gitleaks not installed -- skipping local secret scan (still enforced in CI). Install: https://github.com/gitleaks/gitleaks#installing"
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "gitleaks is required to commit -- CI catches leaks too late (the commit has already"
+  echo "reached GitHub by the time CI runs). Install: https://github.com/gitleaks/gitleaks#installing"
+  exit 1
 fi
+gitleaks git --staged --pre-commit --redact
 
 pnpm lint-staged
 pnpm typecheck
