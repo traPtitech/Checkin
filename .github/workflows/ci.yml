@@ -60,6 +60,11 @@ jobs:
         run: pnpm lint
 
       - name: Knip
+        # knip imports drizzle.config.ts to analyze it, which now throws if
+        # DATABASE_URL is unset (see packages/db/drizzle.config.ts) -- a
+        # dummy value is enough since nothing here actually connects.
+        env:
+          DATABASE_URL: mysql://user:pass@localhost:3306/checkin
         run: pnpm knip
 
       - name: Typecheck

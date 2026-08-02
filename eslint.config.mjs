@@ -27,6 +27,10 @@ export default withNuxt({
   rules: {
     // Allow warn/error for real diagnostics; log/debug/info shouldn't reach a commit.
     'no-console': ['error', { allow: ['warn', 'error'] }],
+    // `!` bypasses the type checker with no runtime check behind it. Prefer
+    // an explicit null/undefined check (which also gives a real error
+    // message instead of a runtime crash at the point of use).
+    '@typescript-eslint/no-non-null-assertion': 'error',
   },
 },
 // Both flat/recommended entries need scoping to apps/web: [0] isn't rule-free

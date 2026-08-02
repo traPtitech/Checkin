@@ -14,7 +14,7 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm -r --parallel typecheck",
     "test": "vitest run",
-    "knip": "knip",
+    "knip": "node --env-file-if-exists=.env node_modules/knip/bin/knip.js",
     "db:generate": "pnpm --filter @checkin/db db:generate",
     "db:migrate": "pnpm --filter @checkin/db db:migrate",
     "db:push": "pnpm --filter @checkin/db db:push",
