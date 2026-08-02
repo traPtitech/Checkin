@@ -27,10 +27,33 @@ export default withNuxt({
   rules: {
     // Allow warn/error for real diagnostics; log/debug/info shouldn't reach a commit.
     'no-console': ['error', { allow: ['warn', 'error'] }],
+    // `==`/`!=` coerce operand types before comparing, which papers over
+    // real bugs (`0 == ''`, `null == undefined`, ...).
+    'eqeqeq': 'error',
+  },
+}, {
+  // Type-aware rules only resolve where Nuxt's typescript config attaches the
+  // TS parser (nuxt/typescript/rules, scoped to these same extensions) --
+  // config files like eslint.config.mjs stay on plain espree and have no type
+  // information to check against.
+  files: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts', '**/*.vue'],
+  rules: {
     // `!` bypasses the type checker with no runtime check behind it. Prefer
     // an explicit null/undefined check (which also gives a real error
     // message instead of a runtime crash at the point of use).
     '@typescript-eslint/no-non-null-assertion': 'error',
+    // A switch over a union that doesn't handle every member compiles fine
+    // and silently falls through at runtime for the missing case.
+    '@typescript-eslint/switch-exhaustiveness-check': 'error',
+    // Use the type-aware version instead, which also catches type-only
+    // shadowing (e.g. a local `type Foo` shadowing an imported one).
+    'no-shadow': 'off',
+    '@typescript-eslint/no-shadow': 'error',
+    // `||` falls through on any falsy value (0, '', false), not just
+    // null/undefined, and silently overwrites values that are falsy but
+    // valid.
+    '@typescript-eslint/prefer-nullish-coalescing': 'error',
+    '@typescript-eslint/prefer-optional-chain': 'error',
   },
 },
 // Both flat/recommended entries need scoping to apps/web: [0] isn't rule-free
