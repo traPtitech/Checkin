@@ -5,15 +5,17 @@ allowBuilds:
   esbuild: true
   unrs-resolver: true
 
-# @nuxt/eslint declares its own loose "@nuxt/kit": "^4.4.8" dependency,
-# independent of the one `nuxt` itself pins. pnpm resolves these as separate
-# peer-dependency instances, so @nuxt/kit ends up in two versions -- which
-# surfaces as ESLint type-aware lint failures on server routes (the two
-# instances resolve different `h3` types). Force a single version to match
-# `nuxt`'s pin below.
+# @nuxt/eslint は独自に緩い "@nuxt/kit": "^4.4.8" 依存を宣言しており、
+# `nuxt` 自体が固定しているバージョンとは独立している。pnpm はこれらを
+# 別々の peer-dependency インスタンスとして解決するため、@nuxt/kit が
+# 2つのバージョンで存在することになる -- これがサーバールートでの ESLint の
+# 型を考慮したチェックの失敗として表面化する(2つのインスタンスが異なる
+# `h3` の型を解決するため)。下の `nuxt` の固定バージョンに合わせて
+# 単一バージョンに強制する。
 #
-# Remove this once @nuxt/eslint scopes its @nuxt/kit range to match whatever
-# `nuxt` version is installed (verify with `pnpm why @nuxt/kit` -- should
-# show exactly one version without this override).
+# @nuxt/eslint が @nuxt/kit の範囲をインストール済みの `nuxt` バージョンに
+# 合わせてスコープするようになったら、このオーバーライドは削除すること
+# (`pnpm why @nuxt/kit` で、このオーバーライドなしでもバージョンが
+# 1つだけになることを確認する)。
 overrides:
   '@nuxt/kit': 4.4.8

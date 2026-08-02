@@ -1,9 +1,9 @@
 import { healthContract } from './health'
 
 /**
- * Application contract. Real procedures are added per feature via OpenSpec
- * change proposals — this contract is the spec that `@checkin/api` must
- * implement and the type the client links against.
+ * アプリケーションコントラクト。実際のプロシージャは機能ごとに OpenSpec の
+ * 変更提案を通じて追加される — このコントラクトは `@checkin/api` が
+ * 実装すべき仕様であり、クライアントがリンクする型でもある。
  */
 export const contract = {
   health: healthContract,

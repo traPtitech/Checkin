@@ -1,6 +1,7 @@
 // @ts-check
-// Root flat config. `@nuxt/eslint` generates a project-aware config (Vue + TS +
-// stylistic formatting) during `nuxt prepare`; we extend it across the monorepo.
+// ルートのフラット設定。`@nuxt/eslint` は `nuxt prepare` 時にプロジェクトを
+// 考慮した設定(Vue + TS + stylistic フォーマット)を生成する。それをモノレポ
+// 全体に拡張している。
 import pluginVueA11y from 'eslint-plugin-vuejs-accessibility'
 import withNuxt from './apps/web/.nuxt/eslint.config.mjs'
 
@@ -12,55 +13,56 @@ export default withNuxt({
     '**/node_modules/**',
     'packages/db/drizzle/**',
     'openspec/**',
-    // Dotfolders are tool-generated (.claude, .understand-anything, .remember, ...)
-    // and self-manage their own gitignore; exclude the whole class so a new tool
-    // never requires touching this config again.
+    // ドットフォルダはツールが生成するもの(.claude, .understand-anything,
+    // .remember, ...)で、それぞれ独自に gitignore を管理している。この
+    // クラス全体を除外しておけば、新しいツールが増えてもこの設定を
+    // 触る必要がなくなる。
     '**/.*/**',
   ],
 }, {
-  // Nuxt pages map to routes, so single-word filenames (index, login, ...) are fine.
+  // Nuxt のページはルートに対応するため、単語1つのファイル名(index, login, ...)でも問題ない。
   files: ['apps/web/app/pages/**/*.vue'],
   rules: {
     'vue/multi-word-component-names': 'off',
   },
 }, {
   rules: {
-    // Allow warn/error for real diagnostics; log/debug/info shouldn't reach a commit.
+    // 本物の診断用途である warn/error は許可する。log/debug/info はコミットに残すべきではない。
     'no-console': ['error', { allow: ['warn', 'error'] }],
-    // `==`/`!=` coerce operand types before comparing, which papers over
-    // real bugs (`0 == ''`, `null == undefined`, ...).
+    // `==`/`!=` は比較前にオペランドの型を強制変換してしまい、本物のバグ
+    // (`0 == ''`, `null == undefined`, ...)を覆い隠す。
     'eqeqeq': 'error',
   },
 }, {
-  // Type-aware rules only resolve where Nuxt's typescript config attaches the
-  // TS parser (nuxt/typescript/rules, scoped to these same extensions) --
-  // config files like eslint.config.mjs stay on plain espree and have no type
-  // information to check against.
+  // 型を考慮したルールは、Nuxt が生成する設定のうち TS パーサーがアタッチ
+  // されている箇所(これらと同じ拡張子にスコープされる)でのみ解決される
+  // -- eslint.config.mjs のような設定ファイルはプレーンな espree のままで、
+  // チェック対象となる型情報を持たない。
   files: ['**/*.ts', '**/*.tsx', '**/*.mts', '**/*.cts', '**/*.vue'],
   rules: {
-    // `!` bypasses the type checker with no runtime check behind it. Prefer
-    // an explicit null/undefined check (which also gives a real error
-    // message instead of a runtime crash at the point of use).
+    // `!` は実行時のチェックを伴わずに型チェッカーを回避する。使用箇所で
+    // 実行時にクラッシュさせるのではなく、実際のエラーメッセージも得られる
+    // 明示的な null/undefined チェックを優先する。
     '@typescript-eslint/no-non-null-assertion': 'error',
-    // A switch over a union that doesn't handle every member compiles fine
-    // and silently falls through at runtime for the missing case.
+    // union に対する switch で全メンバーを処理しなくてもコンパイルは通り、
+    // 未対応のケースでは実行時に黙ってフォールスルーしてしまう。
     '@typescript-eslint/switch-exhaustiveness-check': 'error',
-    // Use the type-aware version instead, which also catches type-only
-    // shadowing (e.g. a local `type Foo` shadowing an imported one).
+    // 代わりに型を考慮したバージョンを使う。こちらは型のみのシャドーイング
+    // (例: ローカルの `type Foo` がインポートしたものをシャドーイングする)も検出する。
     'no-shadow': 'off',
     '@typescript-eslint/no-shadow': 'error',
-    // `||` falls through on any falsy value (0, '', false), not just
-    // null/undefined, and silently overwrites values that are falsy but
-    // valid.
+    // `||` は null/undefined だけでなく、あらゆる falsy な値(0, '', false)で
+    // フォールスルーしてしまい、falsy だが有効な値を黙って上書きしてしまう。
     '@typescript-eslint/prefer-nullish-coalescing': 'error',
     '@typescript-eslint/prefer-optional-chain': 'error',
   },
 },
-// Both flat/recommended entries need scoping to apps/web: [0] isn't rule-free
-// setup, it also sets languageOptions.globals to the full browser global set
-// (window, document, ...), which would otherwise leak into every non-Vue
-// package (packages/api, packages/db, ...) if left unscoped. [1] carries the
-// actual a11y rules plus the vue-eslint-parser.
+// flat/recommended には、ルールだけでなく languageOptions.globals に
+// ブラウザのグローバル一式(window, document, ...)も設定するエントリと、
+// 実際の a11y ルールと vue-eslint-parser を担うエントリが含まれる。
+// 両方とも apps/web にスコープしないと、ブラウザグローバルが Vue でない
+// 全パッケージ(packages/api, packages/db, ...)に漏れ出してしまう。
+// (eslint-plugin-vuejs-accessibility のバージョンアップ時は配列構成を再確認すること)
 ...pluginVueA11y.configs['flat/recommended'].map(config => ({
   ...config,
   files: ['apps/web/**/*.vue'],
