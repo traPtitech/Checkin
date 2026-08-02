@@ -16,8 +16,11 @@ updates:
           - minor
           - patch
     ignore:
-      # @types/node は Node.js のバージョンに合わせて手動で更新するため対象外にする
+      # @types/node のメジャーバージョンは Node.js のメジャーバージョンに合わせて手動で更新する
+      # (minor/patch は型定義の追加・修正のみで Node.js 側のバージョンとは対応しないため自動更新を許可する)
       - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: github-actions
     directory: /
