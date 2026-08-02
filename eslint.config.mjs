@@ -11,7 +11,10 @@ export default withNuxt({
     '**/node_modules/**',
     'packages/db/drizzle/**',
     'openspec/**',
-    '.claude/**',
+    // Dotfolders are tool-generated (.claude, .understand-anything, .remember, ...)
+    // and self-manage their own gitignore; exclude the whole class so a new tool
+    // never requires touching this config again.
+    '**/.*/**',
   ],
 }, {
   // Nuxt pages map to routes, so single-word filenames (index, login, ...) are fine.

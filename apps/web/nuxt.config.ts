@@ -13,6 +13,11 @@ export default defineNuxtConfig({
   eslint: {
     config: {
       stylistic: true,
+      typescript: {
+        // Resolved relative to the monorepo root (eslint's tsconfigRootDir),
+        // not this file's directory.
+        tsconfigPath: './apps/web/tsconfig.json',
+      },
     },
   },
 })

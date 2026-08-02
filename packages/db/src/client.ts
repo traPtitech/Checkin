@@ -8,7 +8,7 @@ export type Database = ReturnType<typeof createDatabase>
  *
  * Uses the default (non-planetscale) mode which is what MariaDB/MySQL want.
  */
-export function createDatabase(connectionString = process.env.DATABASE_URL) {
+export function createDatabase(connectionString = process.env['DATABASE_URL']) {
   if (!connectionString) {
     throw new Error('DATABASE_URL is not set')
   }

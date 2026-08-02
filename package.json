@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "pnpm --filter @checkin/web dev",
@@ -13,14 +13,21 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm -r --parallel typecheck",
+    "test": "vitest run",
+    "knip": "knip",
     "db:generate": "pnpm --filter @checkin/db db:generate",
     "db:migrate": "pnpm --filter @checkin/db db:migrate",
     "db:push": "pnpm --filter @checkin/db db:push",
-    "db:studio": "pnpm --filter @checkin/db db:studio"
+    "db:studio": "pnpm --filter @checkin/db db:studio",
+    "prepare": "husky"
   },
   "devDependencies": {
-    "@nuxt/eslint": "^1.16.0",
-    "eslint": "^9.39.0",
-    "typescript": "^5.9.0"
+    "@types/node": "^24.13.3",
+    "eslint": "^10.8.0",
+    "husky": "^9.1.7",
+    "knip": "^6.31.0",
+    "lint-staged": "^17.3.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   }
 }

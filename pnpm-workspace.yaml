@@ -1,3 +1,9 @@
 packages:
   - apps/*
   - packages/*
+
+# @nuxt/eslint pulls in @nuxt/kit independently of `nuxt`'s own version, which
+# can drift ahead and cause the dev-tooling's h3/type resolution to diverge
+# from the app's. Pin it to match `nuxt`'s pinned version below.
+overrides:
+  '@nuxt/kit': 4.4.8
