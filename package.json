@@ -24,6 +24,7 @@
   "devDependencies": {
     "@types/node": "^24.13.3",
     "eslint": "^10.8.0",
+    "eslint-plugin-vuejs-accessibility": "^2.5.0",
     "husky": "^9.1.7",
     "knip": "^6.31.0",
     "lint-staged": "^17.3.0",

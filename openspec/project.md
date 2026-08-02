@@ -23,7 +23,8 @@ as an OpenSpec proposal (`/opsx:propose`) → apply (`/opsx:apply`) → archive 
   the repo root. `knip` checks for unused files/exports/dependencies.
 - **Testing**: vitest. Test files live next to source as `*.test.ts`; `pnpm test` runs the
   workspace-wide suite.
-- **Git hooks**: husky + lint-staged run `eslint --fix` on staged files, then `pnpm typecheck`
+- **Git hooks**: husky pre-commit runs gitleaks (secret scan, skipped locally if not installed
+  but always enforced in CI) + lint-staged (`eslint --fix` on staged files), then `pnpm typecheck`
   and `pnpm test`, on every commit.
 
 ## Layout

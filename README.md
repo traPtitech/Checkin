@@ -25,6 +25,9 @@ server implementation — is provided by `apps/web/app/plugins/orpc.ts`.
 - Node.js 24 (`.nvmrc`)
 - pnpm 11+
 - Docker (for local MariaDB)
+- [gitleaks](https://github.com/gitleaks/gitleaks) (optional locally — the pre-commit hook scans
+  staged changes for secrets when it's installed, and CI always runs it regardless): `brew install
+  gitleaks`
 
 ## Getting started
 

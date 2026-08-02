@@ -1,6 +1,7 @@
 // @ts-check
 // Root flat config. `@nuxt/eslint` generates a project-aware config (Vue + TS +
 // stylistic formatting) during `nuxt prepare`; we extend it across the monorepo.
+import pluginVueA11y from 'eslint-plugin-vuejs-accessibility'
 import withNuxt from './apps/web/.nuxt/eslint.config.mjs'
 
 export default withNuxt({
@@ -22,4 +23,12 @@ export default withNuxt({
   rules: {
     'vue/multi-word-component-names': 'off',
   },
-})
+}, {
+  rules: {
+    // Allow warn/error for real diagnostics; log/debug/info shouldn't reach a commit.
+    'no-console': ['error', { allow: ['warn', 'error'] }],
+  },
+}, ...pluginVueA11y.configs['flat/recommended'].map(config => ({
+  ...config,
+  files: ['apps/web/**/*.vue'],
+})))
