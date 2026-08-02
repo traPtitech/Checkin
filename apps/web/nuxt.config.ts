@@ -19,11 +19,18 @@ export default defineNuxtConfig({
     // them, not just the app one. Path is relative to that generated file.
     tsConfig: {
       extends: '../../../tsconfig.base.json',
-      // Off by default for backward-compat reasons unrelated to this repo;
-      // type-checks template expressions/bindings (props, v-model, event
-      // handlers) at the same strictness as script code instead of loosening
-      // them.
-      vueCompilerOptions: { strictTemplates: true },
+      vueCompilerOptions: {
+        // Off by default for backward-compat reasons unrelated to this repo;
+        // type-checks template expressions/bindings (props, v-model, event
+        // handlers) at the same strictness as script code instead of
+        // loosening them.
+        strictTemplates: true,
+        // Type-checks attributes that fall through to a component's root
+        // element (e.g. passing `href` to a component whose root is <a>)
+        // against that root element's actual type, instead of treating any
+        // attribute not declared in defineProps as an unknown-prop error.
+        fallthroughAttributes: true,
+      },
     },
     sharedTsConfig: { extends: '../../../tsconfig.base.json' },
     nodeTsConfig: { extends: '../../../tsconfig.base.json' },
