@@ -66,6 +66,24 @@ describe('prices.list', () => {
     expect(captured).toStrictEqual({ limit: 20, starting_after: 'price_last' })
   })
 
+  it('product_id とページネーションを併せて渡す', async () => {
+    let captured: unknown
+    const context = makeContext({
+      list: (arg: unknown) => {
+        captured = arg
+        return Promise.resolve({ has_more: false, data: [] })
+      },
+    })
+
+    await call(
+      appRouter.prices.list,
+      { product_id: 'prod_x', limit: 20, starting_after: 'price_last' },
+      { context },
+    )
+
+    expect(captured).toStrictEqual({ product: 'prod_x', limit: 20, starting_after: 'price_last' })
+  })
+
   it('has_more を引き回し、metadata を traq_id だけに絞る', async () => {
     const context = makeContext({
       list: () =>

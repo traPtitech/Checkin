@@ -30,9 +30,9 @@ export const pricesRouter = {
   ),
 
   list: pub.prices.list.handler(async ({ input, context }) => {
-    // 選択的透過: 支援するパラメータだけを Stripe に渡す。expand は通さない
-    // (通すとネストした product.metadata 等の漏洩経路になる)。has_more と
-    // starting_after でフロントがカーソルページングできる。
+    // 選択的透過: 対応するパラメータだけを Stripe に渡す。expand は通さない
+    // (通すとネストした product.metadata 等の漏洩経路になる)。続きがあれば
+    // フロントが data 末尾の Price ID を次回の starting_after に渡してページ送りする。
     const params: Stripe.PriceListParams = {}
     if (input.product_id) params.product = input.product_id
     if (input.limit !== undefined) params.limit = input.limit
