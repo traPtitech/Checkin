@@ -4,13 +4,13 @@ import * as schema from './schema'
 export type Database = ReturnType<typeof createDatabase>
 
 /**
- * Create a Drizzle database handle backed by mysql2 (MariaDB).
+ * mysql2(MariaDB)を利用した Drizzle のデータベースハンドルを作成する。
  *
- * Uses the default (non-planetscale) mode which is what MariaDB/MySQL want.
+ * MariaDB/MySQL が求める default モード(非 planetscale モード)を使用する。
  */
 export function createDatabase(connectionString = process.env['DATABASE_URL']) {
   if (!connectionString) {
-    throw new Error('DATABASE_URL is not set')
+    throw new Error('DATABASE_URL が設定されていません')
   }
 
   return drizzle(connectionString, { schema, mode: 'default' })

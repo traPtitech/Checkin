@@ -1,12 +1,12 @@
 import { mysqlTable, varchar, timestamp } from 'drizzle-orm/mysql-core'
 
 /**
- * Schema placeholder.
+ * スキーマの仮置き。
  *
- * Real tables are added per feature through OpenSpec change proposals
- * (`/opsx:propose`). The `users` table below only exists so that the
- * Drizzle/migration tooling has something to generate against and the
- * end-to-end wiring can be verified. Replace/extend it as specs land.
+ * 実際のテーブルは機能ごとに OpenSpec の変更提案(`/opsx:propose`)を通じて
+ * 追加される。以下の `users` テーブルは、Drizzle/マイグレーションツールが
+ * 生成対象を持ち、エンドツーエンドの疎通を検証できるようにするためだけに
+ * 存在する。仕様が定まり次第、置き換え・拡張すること。
  */
 export const users = mysqlTable('users', {
   id: varchar('id', { length: 36 }).primaryKey(),

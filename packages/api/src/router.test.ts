@@ -3,7 +3,7 @@ import type { Database } from '@checkin/db'
 import { describe, expect, it } from 'vitest'
 import { appRouter } from './router'
 
-// health.check never touches the DB; the cast just satisfies Context's shape.
+// health.check は DB に一切アクセスしないため、このキャストは Context の型を満たすためだけのもの。
 const context = { db: {} as unknown as Database }
 
 describe('health.check', () => {

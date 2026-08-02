@@ -1,10 +1,11 @@
 import { pub } from './orpc'
 
 /**
- * Application router — implements `@checkin/api-contract`.
+ * アプリケーションルーター — `@checkin/api-contract` を実装する。
  *
- * Only a `health.check` probe exists for now; real procedures are added per
- * feature via OpenSpec change proposals. Keep procedures grouped by capability.
+ * 現時点では `health.check` の疎通確認プロシージャのみ存在する。実際の
+ * プロシージャは機能ごとに OpenSpec の変更提案を通じて追加される。
+ * プロシージャは機能(capability)単位でグループ化しておくこと。
  */
 export const appRouter = pub.router({
   health: {

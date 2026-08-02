@@ -7,11 +7,12 @@ export default defineEventHandler(async (event) => {
   const { matched, response } = await handler.handle(toWebRequest(event), {
     prefix: '/rpc',
     context: {
-      // A single mysql2 pool is created on first use and cached per server
-      // instance (see useDatabase); the pool itself connects lazily. Note that
-      // oRPC reads context.db for *every* request, so DATABASE_URL must be set
-      // even for DB-free procedures like health.check — the getter only defers
-      // creation, it does not make it conditional on the procedure.
+      // mysql2 のプールは初回利用時に1つだけ作成され、サーバーインスタンス
+      // ごとにキャッシュされる(useDatabase 参照)。プール自体の接続は遅延する。
+      // なお oRPC はリクエストのたびに context.db を参照するため、
+      // health.check のような DB 不要なプロシージャでも DATABASE_URL の設定が
+      // 必須になる — このゲッターは生成を遅延させるだけで、プロシージャ
+      // ごとの条件分岐は行わない。
       get db() {
         return useDatabase()
       },
@@ -23,5 +24,5 @@ export default defineEventHandler(async (event) => {
   }
 
   setResponseStatus(event, 404, 'Not Found')
-  return 'Not Found'
+  return '見つかりません'
 })

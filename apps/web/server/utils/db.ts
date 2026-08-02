@@ -2,7 +2,7 @@ import { createDatabase, type Database } from '@checkin/db'
 
 let cached: Database | undefined
 
-/** Lazily create and reuse a single Drizzle/MariaDB handle per server instance. */
+/** サーバーインスタンスごとに Drizzle/MariaDB ハンドルを1つだけ遅延生成し、再利用する。 */
 export function useDatabase(): Database {
   cached ??= createDatabase(useRuntimeConfig().databaseUrl || undefined)
   return cached

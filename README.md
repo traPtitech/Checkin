@@ -1,80 +1,82 @@
 # Checkin
 
-A TypeScript monorepo built with **spec-driven development** (OpenSpec).
-Stack: **Nuxt 4** (UI + Nitro server) · **oRPC** · **Drizzle ORM** + **MariaDB** · **pnpm workspaces**.
+**スペック駆動開発**(OpenSpec)で構築された TypeScript モノレポ。
+スタック: **Nuxt 4**(UI + Nitro サーバー)・**oRPC**・**Drizzle ORM** + **MariaDB**・**pnpm workspaces**。
 
-## Layout
+## 構成
 
 ```
 apps/
-  web/            Nuxt 4 app — UI + Nitro server that hosts the oRPC API
+  web/            Nuxt 4 アプリ — oRPC API をホストする UI + Nitro サーバー
 packages/
-  api-contract/   oRPC contract — procedure input/output/error specs (@checkin/api-contract)
-  api/            oRPC router — implements the contract, request context (@checkin/api)
-  db/             Drizzle schema, MariaDB client, migrations (@checkin/db)
-openspec/         OpenSpec specs & change proposals
+  api-contract/   oRPC コントラクト — プロシージャの入出力・エラー仕様 (@checkin/api-contract)
+  api/            oRPC ルーター — コントラクトを実装、リクエストコンテキスト (@checkin/api)
+  db/             Drizzle スキーマ、MariaDB クライアント、マイグレーション (@checkin/db)
+openspec/         OpenSpec の仕様と変更提案
 ```
 
-The backend is **not** a separate service: the oRPC router (`packages/api`, implementing the
-contract in `packages/api-contract`) is mounted inside Nuxt's Nitro server at
-`apps/web/server/routes/rpc/[...].ts`, and the typed client — linked against the contract, not the
-server implementation — is provided by `apps/web/app/plugins/orpc.ts`.
+バックエンドは独立したサービス**ではない**: oRPC ルーター(`packages/api`、`packages/api-contract`
+のコントラクトを実装)は `apps/web/server/routes/rpc/[...].ts` で Nuxt の Nitro サーバー内に
+マウントされており、型付きクライアント — サーバー実装ではなくコントラクトにリンクされる — は
+`apps/web/app/plugins/orpc.ts` から提供される。
 
-## Requirements
+## 動作要件
 
-- Node.js 24 (`.nvmrc`)
+- Node.js 24(`.nvmrc`)
 - pnpm 11+
-- Docker (for local MariaDB)
-- [gitleaks](https://github.com/gitleaks/gitleaks#installing) — the pre-commit hook refuses to
-  commit without it. CI scans too, but only after a push already reached GitHub, which is too
-  late for a leaked secret.
+- Docker(ローカル MariaDB 用)
+- [gitleaks](https://github.com/gitleaks/gitleaks#installing) — pre-commit フックがこれなしでは
+  コミットを拒否する。CI でもスキャンするが、それはプッシュが GitHub に届いた後なので、
+  漏洩したシークレットに対しては手遅れになる。
 
-## Getting started
+## はじめかた
 
 ```bash
 pnpm install
-cp .env.example .env        # required — DATABASE_URL must be set before `pnpm dev`
+cp .env.example .env        # 必須 — `pnpm dev` の前に DATABASE_URL を設定すること
 
-docker compose up -d        # start MariaDB
-pnpm db:migrate             # apply migrations
-pnpm dev                    # Nuxt dev server → http://localhost:3000
+docker compose up -d        # MariaDB を起動
+pnpm db:migrate             # マイグレーションを適用
+pnpm dev                    # Nuxt 開発サーバー → http://localhost:3000
 ```
 
-The home page calls the `health.check` oRPC procedure to confirm the front → Nitro → oRPC wiring.
-`health.check` doesn't query the database, but every oRPC request resolves `context.db`, so a
-missing `DATABASE_URL` surfaces as a 500 on the home page — copy `.env` first.
+ホームページは `health.check` oRPC プロシージャを呼び出し、フロント → Nitro → oRPC の疎通を
+確認する。`health.check` 自体はデータベースに問い合わせないが、oRPC の全リクエストで
+`context.db` が解決されるため、`DATABASE_URL` が未設定だとホームページで 500 エラーが発生する
+— 先に `.env` をコピーしておくこと。
 
-## Scripts
+## スクリプト
 
-| Command            | Description                                  |
-| ------------------ | -------------------------------------------- |
-| `pnpm dev`         | Run the Nuxt app in dev mode                 |
-| `pnpm build`       | Build the Nuxt app (incl. Nitro server)      |
-| `pnpm lint`        | ESLint across the monorepo                   |
-| `pnpm knip`        | Find unused files, exports, and dependencies |
-| `pnpm typecheck`   | Type-check every package                     |
-| `pnpm test`        | Run the vitest suite                         |
-| `pnpm db:generate` | Generate a Drizzle migration from the schema |
-| `pnpm db:migrate`  | Apply pending migrations                     |
-| `pnpm db:push`     | Push schema directly (dev only)              |
-| `pnpm db:studio`   | Open Drizzle Studio                          |
+| コマンド            | 説明                                          |
+| ------------------- | --------------------------------------------- |
+| `pnpm dev`         | Nuxt アプリを開発モードで実行                  |
+| `pnpm build`       | Nuxt アプリをビルド(Nitro サーバーを含む)     |
+| `pnpm lint`        | モノレポ全体に ESLint を実行                   |
+| `pnpm knip`        | 未使用のファイル・エクスポート・依存関係を検出 |
+| `pnpm typecheck`   | 全パッケージの型チェック                       |
+| `pnpm test`        | vitest スイートを実行                          |
+| `pnpm db:generate` | スキーマから Drizzle マイグレーションを生成    |
+| `pnpm db:migrate`  | 未適用のマイグレーションを適用                 |
+| `pnpm db:push`     | スキーマを直接反映(開発専用)                  |
+| `pnpm db:studio`   | Drizzle Studio を開く                          |
 
-## Spec-driven development (OpenSpec)
+## スペック駆動開発(OpenSpec)
 
-Features are built spec-first. From Claude Code (or any supported assistant):
+機能はスペックファーストで構築される。Claude Code(または対応する他のアシスタント)から:
 
-1. `/opsx:propose "<what you want to build>"` — generates `proposal.md`, `design.md`, `tasks.md`
-   and updated specs under `openspec/changes/<name>/`.
-2. `/opsx:apply` — implement the tasks.
-3. `/opsx:archive` — fold the change into `openspec/specs/` once shipped.
+1. `/opsx:propose "<構築したい内容>"` — `openspec/changes/<name>/` 配下に `proposal.md`・
+   `design.md`・`tasks.md` と更新された仕様を生成する。
+2. `/opsx:apply` — タスクを実装する。
+3. `/opsx:archive` — 出荷後に変更を `openspec/specs/` に統合する。
 
-`openspec list` shows active changes. See [OpenSpec](https://github.com/Fission-AI/OpenSpec) and
-[`openspec/project.md`](openspec/project.md) for project conventions.
+`openspec list` で有効な変更を確認できる。プロジェクトの規約については
+[OpenSpec](https://github.com/Fission-AI/OpenSpec) と
+[`openspec/project.md`](openspec/project.md) を参照。
 
-## Adding to the API / database
+## API / データベースへの追加
 
-- **New oRPC procedure**: define the contract in `packages/api-contract/src/` (using `oc` from
-  `@orpc/contract`), then implement it in `packages/api/src/router.ts` (built from `pub`), grouped
-  by capability. The client picks up types automatically from the contract.
-- **New table**: define it in `packages/db/src/schema.ts`, run `pnpm db:generate`, and commit the
-  generated migration in `packages/db/drizzle/`.
+- **新しい oRPC プロシージャ**: `@orpc/contract` の `oc` を使って `packages/api-contract/src/`
+  にコントラクトを定義し、それを `packages/api/src/router.ts`(`pub` から構築)に機能単位で
+  グループ化して実装する。クライアントはコントラクトから自動的に型を取得する。
+- **新しいテーブル**: `packages/db/src/schema.ts` に定義し、`pnpm db:generate` を実行して、
+  生成されたマイグレーションを `packages/db/drizzle/` にコミットする。

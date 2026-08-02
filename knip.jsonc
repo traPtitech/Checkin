@@ -5,10 +5,10 @@
     ".": {},
     "apps/web": {
       "ignoreDependencies": [
-        // Used implicitly by Vue SFC compilation (runtime helpers, compiler
-        // macros) and by `nuxt typecheck`'s internal vue-tsc invocation.
-        // Knip's built-in Vue compiler only extracts import statements, so
-        // it can't see these — see https://knip.dev/reference/faq
+        // Vue SFC のコンパイル(ランタイムヘルパー、コンパイラマクロ)や
+        // `nuxt typecheck` が内部で呼び出す vue-tsc から暗黙的に使われる。
+        // Knip 組み込みの Vue コンパイラは import 文しか抽出しないため、
+        // これらを検出できない — https://knip.dev/reference/faq 参照
         "vue",
         "vue-tsc"
       ]
