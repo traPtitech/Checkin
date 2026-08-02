@@ -17,7 +17,14 @@ export default defineNuxtConfig({
     // Nuxt generates separate tsconfigs per context (app/shared/node/server)
     // under apps/web/.nuxt/; extend the monorepo's strict base into all of
     // them, not just the app one. Path is relative to that generated file.
-    tsConfig: { extends: '../../../tsconfig.base.json' },
+    tsConfig: {
+      extends: '../../../tsconfig.base.json',
+      // Off by default for backward-compat reasons unrelated to this repo;
+      // type-checks template expressions/bindings (props, v-model, event
+      // handlers) at the same strictness as script code instead of loosening
+      // them.
+      vueCompilerOptions: { strictTemplates: true },
+    },
     sharedTsConfig: { extends: '../../../tsconfig.base.json' },
     nodeTsConfig: { extends: '../../../tsconfig.base.json' },
   },
