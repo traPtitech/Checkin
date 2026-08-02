@@ -26,8 +26,8 @@ server implementation — is provided by `apps/web/app/plugins/orpc.ts`.
 - pnpm 11+
 - Docker (for local MariaDB)
 - [gitleaks](https://github.com/gitleaks/gitleaks) (optional locally — the pre-commit hook scans
-  staged changes for secrets when it's installed, and CI always runs it regardless): `brew install
-  gitleaks`
+  staged changes for secrets when it's installed, and CI always runs it regardless; see the repo's
+  README for install options)
 
 ## Getting started
 

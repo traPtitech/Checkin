@@ -1,7 +1,7 @@
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks git --staged --pre-commit --redact
 else
-  echo "gitleaks not installed -- skipping local secret scan (still enforced in CI). Install: brew install gitleaks"
+  echo "gitleaks not installed -- skipping local secret scan (still enforced in CI). Install: https://github.com/gitleaks/gitleaks#installing"
 fi
 
 pnpm lint-staged
