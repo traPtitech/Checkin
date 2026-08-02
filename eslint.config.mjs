@@ -29,10 +29,12 @@ export default withNuxt({
     'no-console': ['error', { allow: ['warn', 'error'] }],
   },
 },
-// flat/recommended[0] is global setup (plugin registration + languageOptions,
-// no rules) and should stay unscoped; only [1] carries the a11y rules and
-// needs scoping to apps/web so it doesn't apply outside the Nuxt app.
-pluginVueA11y.configs['flat/recommended'][0], {
-  ...pluginVueA11y.configs['flat/recommended'][1],
+// Both flat/recommended entries need scoping to apps/web: [0] isn't rule-free
+// setup, it also sets languageOptions.globals to the full browser global set
+// (window, document, ...), which would otherwise leak into every non-Vue
+// package (packages/api, packages/db, ...) if left unscoped. [1] carries the
+// actual a11y rules plus the vue-eslint-parser.
+...pluginVueA11y.configs['flat/recommended'].map(config => ({
+  ...config,
   files: ['apps/web/**/*.vue'],
-})
+})))
