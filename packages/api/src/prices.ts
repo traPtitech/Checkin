@@ -30,12 +30,15 @@ export const pricesRouter = {
   ),
 
   list: pub.prices.list.handler(async ({ input, context }) => {
-    // 先頭ページのみ(Stripe デフォルト件数)を返す。has_more で続きの有無は
-    // フロントに伝わる。カーソル送りが要るようになったら入力に starting_after を
-    // 足して { starting_after } を渡す。
-    const page = await context.stripe.prices.list(
-      input.product_id ? { product: input.product_id } : {},
-    )
+    // 選択的透過: 支援するパラメータだけを Stripe に渡す。expand は通さない
+    // (通すとネストした product.metadata 等の漏洩経路になる)。has_more と
+    // starting_after でフロントがカーソルページングできる。
+    const params: Stripe.PriceListParams = {}
+    if (input.product_id) params.product = input.product_id
+    if (input.limit !== undefined) params.limit = input.limit
+    if (input.starting_after !== undefined) params.starting_after = input.starting_after
+
+    const page = await context.stripe.prices.list(params)
     return {
       has_more: page.has_more,
       data: page.data.map(toPriceView),

@@ -25,8 +25,18 @@ export const pricesContract = {
     .output(z.custom<PriceView>()),
 
   // 一覧。エンベロープ(has_more/data)は自前 zod で構造検証し、各要素は PriceView。
+  // 入力は選択的透過: 支援するパラメータだけを受ける(Stripe の全パラメータは
+  // 通さない。特に expand はネスト metadata の漏洩経路になるため受け付けない)。
   list: oc
-    .input(z.object({ product_id: z.string().min(1).optional() }))
+    .input(
+      z.object({
+        product_id: z.string().min(1).optional(),
+        // Stripe のカーソルページネーション。limit は 1..100(Stripe デフォルト 10)、
+        // starting_after は直前ページ末尾の Price ID。
+        limit: z.number().int().min(1).max(100).optional(),
+        starting_after: z.string().min(1).optional(),
+      }),
+    )
     .output(
       z.object({
         has_more: z.boolean(),
