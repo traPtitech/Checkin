@@ -8,7 +8,7 @@ import type { WithTraqId } from './views'
 export type CheckoutSessionView = WithTraqId<Stripe.Checkout.Session>
 
 export const checkoutContract = {
-  // Checkout Session 一覧。入力は選択的透過(フィルタ + ページネーション)。
+  // Checkout Session 一覧。入力は選択的透過(params.ts 参照)。
   listSessions: oc
     .input(
       z.object({

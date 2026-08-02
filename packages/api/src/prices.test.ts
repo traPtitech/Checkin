@@ -131,4 +131,12 @@ describe('prices.update', () => {
     expect(capturedParams).toStrictEqual({ active: false, metadata: { traq_id: 'carol' } })
     expect(result.metadata).toStrictEqual({ traq_id: 'carol' })
   })
+
+  it('更新フィールドを1つも指定しなければ reject する', async () => {
+    const context = makeContext({ update: () => Promise.resolve(price({})) })
+
+    await expect(
+      call(appRouter.prices.update, { id: 'price_x' }, { context }),
+    ).rejects.toThrow()
+  })
 })

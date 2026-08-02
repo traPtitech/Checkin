@@ -49,4 +49,14 @@ describe('products.update', () => {
     expect(capturedParams).toStrictEqual({ name: '新会費', description: null })
     expect(result.metadata).toStrictEqual({ traq_id: 'prod' })
   })
+
+  it('更新フィールドを1つも指定しなければ reject する', async () => {
+    const context = testContext({
+      products: { update: () => Promise.resolve(stripeFixture<Stripe.Product>({})) },
+    })
+
+    await expect(
+      call(appRouter.products.update, { id: 'prod_x' }, { context }),
+    ).rejects.toThrow()
+  })
 })

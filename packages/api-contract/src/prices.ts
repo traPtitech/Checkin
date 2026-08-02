@@ -14,8 +14,7 @@ export const pricesContract = {
     .output(z.custom<PriceView>()),
 
   // 一覧。エンベロープ(has_more/data)は自前 zod で構造検証し、各要素は PriceView。
-  // 入力は選択的透過: 対応するパラメータだけを受ける(未知キーは zod が除去する)。
-  // 特に expand はネストした product.metadata の漏洩経路になるため入力に含めない。
+  // 入力は選択的透過(params.ts 参照)。
   list: oc
     .input(
       z.object({

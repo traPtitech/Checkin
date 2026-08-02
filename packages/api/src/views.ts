@@ -2,10 +2,13 @@ import type Stripe from 'stripe'
 import type { WithTraqId } from '@checkin/api-contract'
 
 /**
- * Stripe リソースの metadata を traq_id だけに絞る唯一の変換点。型では絞り込みを
- * 強制できない(Stripe.Metadata が { traq_id?: string } に構造的代入可能)ため、
- * 公開するリソースは必ずこの関数を通す。top-level の Stripe 標準フィールドは
- * そのまま透過する。
+ * Stripe リソースのトップレベル metadata を traq_id だけに絞る唯一の変換点。型では
+ * 絞り込みを強制できない(Stripe.Metadata が { traq_id?: string } に構造的代入可能で、
+ * 戻り値型注釈でも生の metadata を素通ししてしまう)ため、公開するリソースは必ずこの
+ * 関数を通す。それ以外の Stripe 標準フィールドはそのまま透過する。
+ *
+ * 絞るのはトップレベル metadata のみ。ネストした metadata(Invoice.lines[].metadata 等)は
+ * 既定レスポンスに含まれ透過する — 詳細と対処は WithTraqId(@checkin/api-contract)の doc 参照。
  *
  * Stripe SDK の Response は Price 等に加えて非列挙の lastResponse(requestId 等の
  * HTTP メタ情報)を持つが、非列挙なのでスプレッドにもシリアライズにも乗らず、

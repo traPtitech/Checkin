@@ -11,10 +11,10 @@ export function testContext(stripe: unknown): Context {
 
 /**
  * id と metadata を埋めた Stripe リソースのフィクスチャ。リソース全体は再現せず、
- * handler が参照するフィールドだけ供給する。
+ * handler が参照するフィールドだけ供給する。overrides を Partial<T> にすることで、
+ * トップレベルのフィールド名タイポを呼び出し側でコンパイル時に検出できる。
  */
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- 呼び出し側が返り値型を指定する意図的なファクトリ。テスト全体に as を散らさず1箇所に集約する
-export function stripeFixture<T>(overrides: object): T {
+export function stripeFixture<T>(overrides: Partial<T>): T {
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- handler が読むフィールドだけ供給する意図的なキャスト
   return { id: 'obj_x', metadata: {}, ...overrides } as unknown as T
 }

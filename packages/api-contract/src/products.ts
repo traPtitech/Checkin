@@ -8,14 +8,9 @@ import type { WithTraqId } from './views'
 export type ProductView = WithTraqId<Stripe.Product>
 
 export const productsContract = {
-  // 一覧。入力は選択的透過(フィルタ + ページネーション)。各要素は ProductView。
+  // 一覧。入力は選択的透過(params.ts 参照)。各要素は ProductView。
   list: oc
-    .input(
-      z.object({
-        active: z.boolean().optional(),
-        ...pagination,
-      }),
-    )
+    .input(z.object({ active: z.boolean().optional(), ...pagination }))
     .output(
       z.object({
         has_more: z.boolean(),

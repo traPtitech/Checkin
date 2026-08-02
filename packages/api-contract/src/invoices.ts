@@ -8,7 +8,7 @@ import type { WithTraqId } from './views'
 export type InvoiceView = WithTraqId<Stripe.Invoice>
 
 export const invoicesContract = {
-  // 一覧。入力は選択的透過(フィルタ + ページネーション)。各要素は InvoiceView。
+  // 一覧。入力は選択的透過(params.ts 参照)。各要素は InvoiceView。
   list: oc
     .input(
       z.object({

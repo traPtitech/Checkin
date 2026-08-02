@@ -22,9 +22,15 @@ export const invoicesRouter = {
   }),
 
   create: pub.invoices.create.handler(async ({ input, context }) => {
-    // Invoice を作成 → 価格を項目として追加 → 確定してホスト支払い URL を得る。
+    // Invoice を作成 → 価格を項目として追加 → 確定して Stripe がホストする支払い URL を得る。
+    // collection_method は明示的に send_invoice(リンク払い)に固定する。既定の
+    // charge_automatically だと finalize 時点で顧客の既定支払い方法へ自動課金され得るが、
+    // このエンドポイントは支払い URL を返すリンク払いを意図しているため。
     const invoice = await context.stripe.invoices.create({
       customer: input.customer_id,
+      collection_method: 'send_invoice',
+      // send_invoice には支払い期限が必須。会費請求の既定として30日を置く。
+      days_until_due: 30,
       auto_advance: false,
       ...(input.metadata ? { metadata: input.metadata } : {}),
     })

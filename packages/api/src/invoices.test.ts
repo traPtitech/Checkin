@@ -21,11 +21,12 @@ describe('invoices.list', () => {
 
     const result = await call(
       appRouter.invoices.list,
-      { customer_id: 'cus_1', status: 'open' },
+      { customer_id: 'cus_1', subscription_id: 'sub_1', status: 'open' },
       { context },
     )
 
-    expect(captured).toStrictEqual({ customer: 'cus_1', status: 'open' })
+    // customer_id / subscription_id は Stripe のキー名に写像する。
+    expect(captured).toStrictEqual({ customer: 'cus_1', subscription: 'sub_1', status: 'open' })
     expect(result.data[0]?.metadata).toStrictEqual({ traq_id: 'inv' })
   })
 })
@@ -60,6 +61,8 @@ describe('invoices.create', () => {
 
     expect(calls.create).toStrictEqual({
       customer: 'cus_1',
+      collection_method: 'send_invoice',
+      days_until_due: 30,
       auto_advance: false,
       metadata: { traq_id: 'z' },
     })
@@ -71,6 +74,35 @@ describe('invoices.create', () => {
     })
     expect(calls.finalize).toBe('in_1')
     expect(result).toStrictEqual({ invoice_id: 'in_1', payment_url: 'https://pay.example/in_1' })
+  })
+
+  it('metadata 未指定なら create に metadata を含めない', async () => {
+    let capturedCreate: unknown
+    const context = testContext({
+      invoices: {
+        create: (params: unknown) => {
+          capturedCreate = params
+          return Promise.resolve({ id: 'in_1' })
+        },
+        finalizeInvoice: () =>
+          Promise.resolve({ id: 'in_1', hosted_invoice_url: 'https://pay.example/in_1' }),
+      },
+      invoiceItems: { create: () => Promise.resolve({}) },
+    })
+
+    await call(
+      appRouter.invoices.create,
+      { customer_id: 'cus_1', price_id: 'price_1' },
+      { context },
+    )
+
+    // metadata キーが付かないことを toStrictEqual で保証する。
+    expect(capturedCreate).toStrictEqual({
+      customer: 'cus_1',
+      collection_method: 'send_invoice',
+      days_until_due: 30,
+      auto_advance: false,
+    })
   })
 
   it('確定した Invoice に支払い URL が無ければエラーにする', async () => {
