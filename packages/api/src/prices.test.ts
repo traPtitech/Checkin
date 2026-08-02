@@ -1,7 +1,7 @@
 import { call } from '@orpc/server'
-import type { Database } from '@checkin/db'
 import type Stripe from 'stripe'
 import { describe, expect, it } from 'vitest'
+import type { Context } from './orpc'
 import { appRouter } from './router'
 
 /**
@@ -9,18 +9,15 @@ import { appRouter } from './router'
  * metadata しか触らないため、Stripe の厳密なメソッド型には合わせず unknown で受ける。
  */
 function makeContext(prices: unknown) {
-  return {
-    db: {} as unknown as Database,
-    stripe: { prices } as unknown as Stripe,
-  }
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- prices リソースだけを供給する最小スタブ。handler は db に触れず、stripe も prices しか使わない
+  return { db: {}, stripe: { prices } } as unknown as Context
 }
 
-/** 必須フィールドを埋めた Price フィクスチャ。metadata 等は上書きできる。 */
+/** handler が読むフィールドだけ埋めた Price フィクスチャ。metadata 等は上書きできる。 */
 function price(overrides: Partial<Stripe.Price>): Stripe.Price {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- Price 全体は再現せず、handler が参照するフィールドだけ供給する
   return {
     id: 'price_x',
-    active: true,
-    unit_amount: 1000,
     metadata: {},
     ...overrides,
   } as unknown as Stripe.Price

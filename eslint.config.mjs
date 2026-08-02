@@ -55,6 +55,10 @@ export default withNuxt({
     // フォールスルーしてしまい、falsy だが有効な値を黙って上書きしてしまう。
     '@typescript-eslint/prefer-nullish-coalescing': 'error',
     '@typescript-eslint/prefer-optional-chain': 'error',
+    // `as` 型アサーションは型チェッカーを迂回し、実際とズレた型を黙って通す。
+    // 原則禁止(`as const` と名前空間 import `* as` は対象外)。テストのスタブなど
+    // 安全が確認できる箇所のみ、理由を添えて eslint-disable で個別に許可する。
+    '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
   },
 },
 // flat/recommended には、ルールだけでなく languageOptions.globals に
