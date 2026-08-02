@@ -9,7 +9,7 @@ as an OpenSpec proposal (`/opsx:propose`) → apply (`/opsx:apply`) → archive 
 
 ## Tech stack
 
-- **Language**: TypeScript (strict), Node.js 22, ESM.
+- **Language**: TypeScript (strict), Node.js 24, ESM.
 - **Monorepo**: pnpm workspaces (no Turborepo). Packages reference each other with `workspace:*`.
 - **Frontend + server**: Nuxt 4 (`apps/web`). The backend is **not** a separate service — the
   API is hosted inside Nuxt's Nitro server.
@@ -19,7 +19,12 @@ as an OpenSpec proposal (`/opsx:propose`) → apply (`/opsx:apply`) → archive 
   `apps/web/app/plugins/orpc.ts` links against the contract, not the server implementation.
 - **Database**: MariaDB via Drizzle ORM (`drizzle-orm/mysql2`, dialect `mysql`) in `packages/db`.
   Migrations live in `packages/db/drizzle/` and are committed.
-- **Lint/format**: ESLint flat config (`@nuxt/eslint`, stylistic enabled) at the repo root.
+- **Lint/format**: ESLint flat config (`@nuxt/eslint`, stylistic enabled, type-aware rules) at
+  the repo root. `knip` checks for unused files/exports/dependencies.
+- **Testing**: vitest. Test files live next to source as `*.test.ts`; `pnpm test` runs the
+  workspace-wide suite.
+- **Git hooks**: husky + lint-staged run `eslint --fix` on staged files, then `pnpm typecheck`
+  and `pnpm test`, on every commit.
 
 ## Layout
 
@@ -42,7 +47,7 @@ packages/db            Drizzle schema, MariaDB client, migrations
 - The client imports the contract (`@checkin/api-contract`), typed via `ContractRouterClient`
   from `@orpc/contract` — never import `@checkin/api` (the server implementation) into `apps/web`
   UI code.
-- Keep the build green: `pnpm lint`, `pnpm typecheck`, `pnpm build`.
+- Keep the build green: `pnpm lint`, `pnpm knip`, `pnpm typecheck`, `pnpm test`, `pnpm build`.
 
 ## Local development
 
