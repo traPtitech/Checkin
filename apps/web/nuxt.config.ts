@@ -5,6 +5,8 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // 実行時に NUXT_DATABASE_URL で上書き可能。
     databaseUrl: process.env['DATABASE_URL'] ?? '',
+    // 実行時に NUXT_STRIPE_SECRET_KEY で上書き可能。サーバー専用(先頭に public を付けない)。
+    stripeSecretKey: process.env['STRIPE_SECRET_KEY'] ?? '',
   },
   compatibilityDate: '2025-01-01',
   nitro: {

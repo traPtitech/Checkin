@@ -1,4 +1,5 @@
 import { healthContract } from './health'
+import { pricesContract } from './prices'
 
 /**
  * アプリケーションコントラクト。実際のプロシージャは機能ごとに OpenSpec の
@@ -7,4 +8,5 @@ import { healthContract } from './health'
  */
 export const contract = {
   health: healthContract,
+  prices: pricesContract,
 }
