@@ -9,14 +9,16 @@ Stack: **Nuxt 4** (UI + Nitro server) · **oRPC** · **Drizzle ORM** + **MariaDB
 apps/
   web/            Nuxt 4 app — UI + Nitro server that hosts the oRPC API
 packages/
-  api/            oRPC router, procedures, request context (@checkin/api)
+  api-contract/   oRPC contract — procedure input/output/error specs (@checkin/api-contract)
+  api/            oRPC router — implements the contract, request context (@checkin/api)
   db/             Drizzle schema, MariaDB client, migrations (@checkin/db)
 openspec/         OpenSpec specs & change proposals
 ```
 
-The backend is **not** a separate service: the oRPC router (`packages/api`) is mounted inside
-Nuxt's Nitro server at `apps/web/server/routes/rpc/[...].ts`, and the typed client is provided by
-`apps/web/app/plugins/orpc.ts`.
+The backend is **not** a separate service: the oRPC router (`packages/api`, implementing the
+contract in `packages/api-contract`) is mounted inside Nuxt's Nitro server at
+`apps/web/server/routes/rpc/[...].ts`, and the typed client — linked against the contract, not the
+server implementation — is provided by `apps/web/app/plugins/orpc.ts`.
 
 ## Requirements
 
@@ -66,7 +68,8 @@ Features are built spec-first. From Claude Code (or any supported assistant):
 
 ## Adding to the API / database
 
-- **New oRPC procedure**: add to `packages/api/src/router.ts` (built from `pub`), grouped by
-  capability. The client picks up types automatically via `AppRouter`.
+- **New oRPC procedure**: define the contract in `packages/api-contract/src/` (using `oc` from
+  `@orpc/contract`), then implement it in `packages/api/src/router.ts` (built from `pub`), grouped
+  by capability. The client picks up types automatically from the contract.
 - **New table**: define it in `packages/db/src/schema.ts`, run `pnpm db:generate`, and commit the
   generated migration in `packages/db/drizzle/`.

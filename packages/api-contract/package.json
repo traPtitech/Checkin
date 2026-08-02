@@ -1,5 +1,5 @@
 {
-  "name": "@checkin/api",
+  "name": "@checkin/api-contract",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,9 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@checkin/api-contract": "workspace:*",
-    "@checkin/db": "workspace:*",
-    "@orpc/server": "^1.14.0"
+    "@orpc/contract": "^1.14.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
