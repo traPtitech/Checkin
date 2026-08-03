@@ -20,3 +20,19 @@ export function narrowMetadata<T extends { metadata: Stripe.Metadata | null }>(
   const traqId = obj.metadata?.['traq_id']
   return { ...obj, metadata: traqId ? { traq_id: traqId } : {} }
 }
+
+/**
+ * Stripe の展開可能な参照(customer, payment_intent 等)から ID だけを取り出す。
+ * expand しない前提では文字列 ID だが、型は string | オブジェクト | null なので
+ * PII を含むオブジェクトを出さないよう ID に正規化する。
+ */
+export function idOf(ref: string | { id: string } | null): string | null {
+  if (ref === null) return null
+  return typeof ref === 'string' ? ref : ref.id
+}
+
+/** metadata から traq_id だけを取り出す(allowlist な View 用)。 */
+export function traqIdOf(metadata: Stripe.Metadata | null): { traq_id?: string } {
+  const traqId = metadata?.['traq_id']
+  return traqId ? { traq_id: traqId } : {}
+}

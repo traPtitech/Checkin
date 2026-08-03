@@ -5,7 +5,7 @@ import { appRouter } from './router'
 import { stripeFixture, testContext } from './test-utils'
 
 describe('invoices.list', () => {
-  it('フィルタを Stripe のキー名に写像し、metadata を traq_id だけに絞る', async () => {
+  it('フィルタを Stripe のキー名に写像し、allowlist のフィールドだけを返す', async () => {
     let captured: unknown
     const context = testContext({
       invoices: {
@@ -13,7 +13,22 @@ describe('invoices.list', () => {
           captured = params
           return Promise.resolve({
             has_more: false,
-            data: [stripeFixture<Stripe.Invoice>({ metadata: { traq_id: 'inv', internal: 'secret' } })],
+            data: [
+              stripeFixture<Stripe.Invoice>({
+                id: 'in_1',
+                status: 'open',
+                amount_due: 1000,
+                amount_paid: 0,
+                amount_remaining: 1000,
+                created: 1680000000,
+                customer: 'cus_1',
+                hosted_invoice_url: 'https://pay.example/in_1',
+                metadata: { traq_id: 'inv', internal: 'secret' },
+                // allowlist されない PII と内部キー。出力に出てはいけない。
+                customer_email: 'secret@example.com',
+                customer_name: 'Secret Name',
+              }),
+            ],
           })
         },
       },
@@ -27,7 +42,18 @@ describe('invoices.list', () => {
 
     // customer_id / subscription_id は Stripe のキー名に写像する。
     expect(captured).toStrictEqual({ customer: 'cus_1', subscription: 'sub_1', status: 'open' })
-    expect(result.data[0]?.metadata).toStrictEqual({ traq_id: 'inv' })
+    // toStrictEqual で allowlist を厳密に検証: customer_email/customer_name/internal、
+    // および bearer URL の hosted_invoice_url は一覧の出力に含まれない。
+    expect(result.data[0]).toStrictEqual({
+      id: 'in_1',
+      status: 'open',
+      amount_due: 1000,
+      amount_paid: 0,
+      amount_remaining: 1000,
+      created: 1680000000,
+      customer: 'cus_1',
+      metadata: { traq_id: 'inv' },
+    })
   })
 })
 

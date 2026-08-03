@@ -1,6 +1,21 @@
 import type Stripe from 'stripe'
+import type { InvoiceView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { narrowMetadata } from './views'
+import { idOf, traqIdOf } from './views'
+
+/** Stripe の Invoice を allowlist の InvoiceView に変換する(公開フィールドを明示選択)。 */
+function toInvoiceView(invoice: Stripe.Invoice): InvoiceView {
+  return {
+    id: invoice.id,
+    status: invoice.status,
+    amount_due: invoice.amount_due,
+    amount_paid: invoice.amount_paid,
+    amount_remaining: invoice.amount_remaining,
+    created: invoice.created,
+    customer: idOf(invoice.customer),
+    metadata: traqIdOf(invoice.metadata),
+  }
+}
 
 /** 請求プロシージャ — Stripe の Invoice を Checkin API として公開する。 */
 export const invoicesRouter = {
@@ -17,7 +32,7 @@ export const invoicesRouter = {
     const page = await context.stripe.invoices.list(params)
     return {
       has_more: page.has_more,
-      data: page.data.map(invoice => narrowMetadata(invoice)),
+      data: page.data.map(toInvoiceView),
     }
   }),
 

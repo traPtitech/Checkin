@@ -5,7 +5,7 @@ import { appRouter } from './router'
 import { stripeFixture, testContext } from './test-utils'
 
 describe('checkout.listSessions', () => {
-  it('フィルタとページネーションを Stripe に写像し、metadata を traq_id だけに絞る', async () => {
+  it('フィルタを Stripe に写像し、allowlist のフィールドだけを返す', async () => {
     let captured: unknown
     const context = testContext({
       checkout: {
@@ -16,7 +16,16 @@ describe('checkout.listSessions', () => {
               has_more: true,
               data: [
                 stripeFixture<Stripe.Checkout.Session>({
+                  id: 'cs_1',
+                  status: 'complete',
+                  amount_total: 2198,
+                  amount_subtotal: 1998,
+                  created: 1680000000,
+                  customer: 'cus_1',
+                  payment_intent: 'pi_1',
                   metadata: { traq_id: 'cs', internal: 'secret' },
+                  // allowlist されない PII。出力に出てはいけない。
+                  customer_email: 'secret@example.com',
                 }),
               ],
             })
@@ -39,6 +48,16 @@ describe('checkout.listSessions', () => {
       limit: 3,
     })
     expect(result.has_more).toBe(true)
-    expect(result.data[0]?.metadata).toStrictEqual({ traq_id: 'cs' })
+    // toStrictEqual で allowlist を厳密に検証: customer_email/internal は含まれない。
+    expect(result.data[0]).toStrictEqual({
+      id: 'cs_1',
+      status: 'complete',
+      amount_total: 2198,
+      amount_subtotal: 1998,
+      created: 1680000000,
+      customer: 'cus_1',
+      payment_intent: 'pi_1',
+      metadata: { traq_id: 'cs' },
+    })
   })
 })

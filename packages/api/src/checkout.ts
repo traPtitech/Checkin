@@ -1,6 +1,21 @@
 import type Stripe from 'stripe'
+import type { CheckoutSessionView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { narrowMetadata } from './views'
+import { idOf, traqIdOf } from './views'
+
+/** Stripe の Checkout Session を allowlist の View に変換する(公開フィールドを明示選択)。 */
+function toCheckoutSessionView(session: Stripe.Checkout.Session): CheckoutSessionView {
+  return {
+    id: session.id,
+    status: session.status,
+    amount_total: session.amount_total,
+    amount_subtotal: session.amount_subtotal,
+    created: session.created,
+    customer: idOf(session.customer),
+    payment_intent: idOf(session.payment_intent),
+    metadata: traqIdOf(session.metadata),
+  }
+}
 
 /** Checkout プロシージャ — Stripe の Checkout Session を Checkin API として公開する。 */
 export const checkoutRouter = {
@@ -17,7 +32,7 @@ export const checkoutRouter = {
     const page = await context.stripe.checkout.sessions.list(params)
     return {
       has_more: page.has_more,
-      data: page.data.map(session => narrowMetadata(session)),
+      data: page.data.map(toCheckoutSessionView),
     }
   }),
 }
