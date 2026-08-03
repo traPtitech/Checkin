@@ -52,7 +52,6 @@ describe('invoices.list', () => {
       amount_remaining: 1000,
       created: 1680000000,
       customer: 'cus_1',
-      metadata: { traq_id: 'inv' },
     })
   })
 })

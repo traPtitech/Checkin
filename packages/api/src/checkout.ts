@@ -1,7 +1,7 @@
 import type Stripe from 'stripe'
 import type { CheckoutSessionView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { idOf, traqIdOf } from './views'
+import { idOf } from './views'
 
 /** Stripe の Checkout Session を allowlist の View に変換する(公開フィールドを明示選択)。 */
 function toCheckoutSessionView(session: Stripe.Checkout.Session): CheckoutSessionView {
@@ -13,7 +13,6 @@ function toCheckoutSessionView(session: Stripe.Checkout.Session): CheckoutSessio
     created: session.created,
     customer: idOf(session.customer),
     payment_intent: idOf(session.payment_intent),
-    metadata: traqIdOf(session.metadata),
   }
 }
 

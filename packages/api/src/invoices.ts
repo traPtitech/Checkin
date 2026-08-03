@@ -1,7 +1,7 @@
 import type Stripe from 'stripe'
 import type { InvoiceView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { idOf, traqIdOf } from './views'
+import { idOf } from './views'
 
 /** Stripe の Invoice を allowlist の InvoiceView に変換する(公開フィールドを明示選択)。 */
 function toInvoiceView(invoice: Stripe.Invoice): InvoiceView {
@@ -13,7 +13,6 @@ function toInvoiceView(invoice: Stripe.Invoice): InvoiceView {
     amount_remaining: invoice.amount_remaining,
     created: invoice.created,
     customer: idOf(invoice.customer),
-    metadata: traqIdOf(invoice.metadata),
   }
 }
 

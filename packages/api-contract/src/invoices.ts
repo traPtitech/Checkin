@@ -5,8 +5,9 @@ import { pagination } from './params'
 /**
  * Invoice の公開形。Invoice は customer_email 等の PII やネストした metadata
  * (lines[].metadata 等)を含むため、Stripe オブジェクトを透過せず、公開する
- * フィールドを allowlist で明示する。customer は ID のみ(PII オブジェクトは出さない)、
- * metadata は traq_id のみ。実装は @checkin/api で各フィールドを明示的に組み立てる。
+ * フィールドを allowlist で明示する。customer は ID のみ(PII オブジェクトは出さない)。
+ * traq_id は Stripe metadata ではなく自前 DB を単一ソースとするため出力に含めない
+ * (必要になれば customer→DB 逆引きで足す、#18)。実装は @checkin/api で明示的に組み立てる。
  *
  * hosted_invoice_url は一覧には含めない。これは認証不要で請求内容の閲覧・支払いが
  * できる bearer URL であり、一覧で配る必要がない(send_invoice では Stripe が顧客へ
@@ -22,7 +23,6 @@ const invoiceView = z.object({
   amount_remaining: z.number(),
   created: z.number(),
   customer: z.string().nullable(),
-  metadata: z.object({ traq_id: z.string().optional() }),
 })
 
 export type InvoiceView = z.infer<typeof invoiceView>

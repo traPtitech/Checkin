@@ -1,11 +1,11 @@
 import type Stripe from 'stripe'
 import { pub } from './orpc'
-import { narrowMetadata } from './views'
+import { omitMetadata } from './views'
 
 /** 価格プロシージャ — Stripe の Price を Checkin API として公開する。 */
 export const pricesRouter = {
   retrieve: pub.prices.retrieve.handler(async ({ input, context }) =>
-    narrowMetadata(await context.stripe.prices.retrieve(input.id)),
+    omitMetadata(await context.stripe.prices.retrieve(input.id)),
   ),
 
   list: pub.prices.list.handler(async ({ input, context }) => {
@@ -23,13 +23,13 @@ export const pricesRouter = {
     const page = await context.stripe.prices.list(params)
     return {
       has_more: page.has_more,
-      data: page.data.map(price => narrowMetadata(price)),
+      data: page.data.map(price => omitMetadata(price)),
     }
   }),
 
   update: pub.prices.update.handler(async ({ input, context }) => {
     const params: Stripe.PriceUpdateParams = {}
     if (input.active !== undefined) params.active = input.active
-    return narrowMetadata(await context.stripe.prices.update(input.id, params))
+    return omitMetadata(await context.stripe.prices.update(input.id, params))
   }),
 }

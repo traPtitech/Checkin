@@ -2,10 +2,9 @@ import { oc } from '@orpc/contract'
 import { z } from 'zod'
 import type Stripe from 'stripe'
 import { pagination } from './params'
-import type { WithTraqId } from './views'
 
-/** Stripe の Product を Checkin の公開形にした型(metadata を traq_id に絞る)。 */
-export type ProductView = WithTraqId<Stripe.Product>
+/** Product の公開形。Stripe の Product を透過するが metadata は公開しない(理由は PriceView 参照)。 */
+export type ProductView = Omit<Stripe.Product, 'metadata'>
 
 export const productsContract = {
   // 一覧。入力は選択的透過(params.ts 参照)。各要素は ProductView。

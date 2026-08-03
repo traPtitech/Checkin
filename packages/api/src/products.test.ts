@@ -23,7 +23,7 @@ describe('products.list', () => {
 })
 
 describe('products.update', () => {
-  it('指定フィールドを Stripe に渡し、結果の metadata を traq_id だけに絞る', async () => {
+  it('指定フィールドを Stripe に渡し、結果に metadata を含めない', async () => {
     let capturedId: unknown
     let capturedParams: unknown
     const context = testContext({
@@ -45,9 +45,10 @@ describe('products.update', () => {
     )
 
     expect(capturedId).toBe('prod_x')
-    // active / metadata は未指定なので渡さない。description の null は透過する。
+    // active は未指定なので渡さない。description の null は透過する。
     expect(capturedParams).toStrictEqual({ name: '新会費', description: null })
-    expect(result.metadata).toStrictEqual({ traq_id: 'prod' })
+    // 透過だが metadata は出力しない(traq_id は自前 DB 単一ソースのため)。
+    expect(result).toStrictEqual({ id: 'obj_x' })
   })
 
   it('更新フィールドを1つも指定しなければ reject する', async () => {

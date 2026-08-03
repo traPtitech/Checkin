@@ -5,8 +5,8 @@ import { pagination } from './params'
 /**
  * Checkout Session の公開形。Session は customer_details 等の PII を含むため、
  * Stripe オブジェクトを透過せず、公開するフィールドを allowlist で明示する。
- * customer / payment_intent は ID のみ、metadata は traq_id のみ。
- * 実装は @checkin/api で各フィールドを明示的に組み立てる。
+ * customer / payment_intent は ID のみ。traq_id は自前 DB を単一ソースとするため
+ * 出力に含めない(#18)。実装は @checkin/api で各フィールドを明示的に組み立てる。
  */
 const checkoutSessionView = z.object({
   id: z.string(),
@@ -17,7 +17,6 @@ const checkoutSessionView = z.object({
   created: z.number(),
   customer: z.string().nullable(),
   payment_intent: z.string().nullable(),
-  metadata: z.object({ traq_id: z.string().optional() }),
 })
 
 export type CheckoutSessionView = z.infer<typeof checkoutSessionView>

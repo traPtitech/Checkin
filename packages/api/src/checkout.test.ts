@@ -57,7 +57,6 @@ describe('checkout.listSessions', () => {
       created: 1680000000,
       customer: 'cus_1',
       payment_intent: 'pi_1',
-      metadata: { traq_id: 'cs' },
     })
   })
 })

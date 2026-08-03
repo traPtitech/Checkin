@@ -2,10 +2,13 @@ import { oc } from '@orpc/contract'
 import { z } from 'zod'
 import type Stripe from 'stripe'
 import { pagination } from './params'
-import type { WithTraqId } from './views'
 
-/** Stripe の Price を Checkin の公開形にした型(metadata を traq_id に絞る)。 */
-export type PriceView = WithTraqId<Stripe.Price>
+/**
+ * Price の公開形。Stripe の Price を透過するが metadata は公開しない。metadata は
+ * Checkin 独自の traq_id を持たせる用途しかなく、その traq_id は Stripe ではなく
+ * 自前 DB を単一ソースとして持つため(出力で必要になれば customer→DB 逆引きで解決、#18)。
+ */
+export type PriceView = Omit<Stripe.Price, 'metadata'>
 
 export const pricesContract = {
   // 単一の Price を PriceView として返す。

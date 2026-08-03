@@ -1,5 +1,4 @@
 export { contract } from './router'
-export type { WithTraqId } from './views'
 export type { PriceView } from './prices'
 export type { ProductView } from './products'
 export type { InvoiceView } from './invoices'

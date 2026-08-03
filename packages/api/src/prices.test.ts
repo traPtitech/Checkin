@@ -75,7 +75,7 @@ describe('prices.list', () => {
     expect(captured).toStrictEqual({ product: 'prod_x', limit: 20, starting_after: 'price_last' })
   })
 
-  it('has_more を引き回し、metadata を traq_id だけに絞る', async () => {
+  it('has_more を引き回し、透過するが metadata は出力しない', async () => {
     const context = makeContext({
       list: () =>
         Promise.resolve({
@@ -90,34 +90,33 @@ describe('prices.list', () => {
     const result = await call(appRouter.prices.list, {}, { context })
 
     expect(result.has_more).toBe(true)
-    // internal は落ち、traq_id だけが残る(toStrictEqual で余計なキーの不在も検証)
-    expect(result.data[0]?.metadata).toStrictEqual({ traq_id: 'alice' })
-    // traq_id が無ければ空になる(他キーも残らない)
-    expect(result.data[1]?.metadata).toStrictEqual({})
+    // 透過だが metadata は出力しない(traq_id は自前 DB 単一ソースのため)。
+    expect(result.data[0]).toStrictEqual({ id: 'price_a' })
+    expect(result.data[1]).toStrictEqual({ id: 'price_b' })
   })
 })
 
 describe('prices.retrieve', () => {
-  it('metadata を traq_id だけに絞り、内部キーを漏らさない', async () => {
+  it('透過するが metadata は出力しない', async () => {
     const context = makeContext({
-      retrieve: () => Promise.resolve(price({ metadata: { traq_id: 'bob', internal: 'secret' } })),
+      retrieve: () => Promise.resolve(price({ id: 'price_x', metadata: { traq_id: 'bob', internal: 'secret' } })),
     })
 
     const result = await call(appRouter.prices.retrieve, { id: 'price_x' }, { context })
 
-    expect(result.metadata).toStrictEqual({ traq_id: 'bob' })
+    expect(result).toStrictEqual({ id: 'price_x' })
   })
 })
 
 describe('prices.update', () => {
-  it('active を Stripe に渡し、結果の metadata を traq_id だけに絞る', async () => {
+  it('active を Stripe に渡し、結果に metadata を含めない', async () => {
     let capturedId: unknown
     let capturedParams: unknown
     const context = makeContext({
       update: (id: unknown, params: unknown) => {
         capturedId = id
         capturedParams = params
-        return Promise.resolve(price({ metadata: { traq_id: 'carol', internal: 'secret' } }))
+        return Promise.resolve(price({ id: 'price_x', metadata: { traq_id: 'carol', internal: 'secret' } }))
       },
     })
 
@@ -125,8 +124,7 @@ describe('prices.update', () => {
 
     expect(capturedId).toBe('price_x')
     expect(capturedParams).toStrictEqual({ active: false })
-    // 出力側の metadata は引き続き traq_id に絞られる(レスポンス専用)。
-    expect(result.metadata).toStrictEqual({ traq_id: 'carol' })
+    expect(result).toStrictEqual({ id: 'price_x' })
   })
 
   it('更新フィールドを1つも指定しなければ reject する', async () => {
