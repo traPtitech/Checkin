@@ -1,7 +1,7 @@
 import { oc } from '@orpc/contract'
 import { z } from 'zod'
 import type Stripe from 'stripe'
-import { pagination, writableMetadata } from './params'
+import { pagination } from './params'
 import type { WithTraqId } from './views'
 
 /** Stripe の Price を Checkin の公開形にした型(metadata を traq_id に絞る)。 */
@@ -31,18 +31,15 @@ export const pricesContract = {
       }),
     ),
 
-  // 更新。metadata は traq_id のみ書き込み可。少なくとも1フィールドの指定を要求する。
+  // 更新。traq_id はレスポンス専用(サーバ由来)のため入力では受けない。
   update: oc
     .input(
       z
         .object({
           id: z.string().min(1),
           active: z.boolean().optional(),
-          metadata: writableMetadata,
         })
-        .refine(v => v.active !== undefined || v.metadata !== undefined, {
-          message: 'active か metadata の少なくとも一方を指定してください',
-        }),
+        .refine(v => v.active !== undefined, { message: 'active を指定してください' }),
     )
     .output(z.custom<PriceView>()),
 }

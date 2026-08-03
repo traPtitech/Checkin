@@ -23,7 +23,6 @@ export const productsRouter = {
     if (input.active !== undefined) params.active = input.active
     if (input.name !== undefined) params.name = input.name
     if (input.description !== undefined) params.description = input.description
-    if (input.metadata !== undefined) params.metadata = input.metadata
 
     return narrowMetadata(await context.stripe.products.update(input.id, params))
   }),

@@ -41,22 +41,40 @@ export const invoicesRouter = {
     // collection_method は明示的に send_invoice(リンク払い)に固定する。既定の
     // charge_automatically だと finalize 時点で顧客の既定支払い方法へ自動課金され得るが、
     // このエンドポイントは支払い URL を返すリンク払いを意図しているため。
-    const invoice = await context.stripe.invoices.create({
+    // days_until_due は運用で決めるため入力任意(send_invoice で送るなら指定が必要)。
+    //
+    // idempotency_key はこのフロー全体(3回の Stripe 呼び出し)をリトライ安全にする。
+    // create のみに付けると、リトライ時に同一 Invoice へ明細が二重追加され二重請求に
+    // なるため、呼び出しごとに派生キーを付ける(Stripe はキー単位で応答をキャッシュする)。
+    // 認可導入後はサーバ側でユーザーごとに名前空間化する(#15)。
+    const idem = (suffix: string): { idempotencyKey: string } | undefined =>
+      input.idempotency_key !== undefined
+        ? { idempotencyKey: `${input.idempotency_key}:${suffix}` }
+        : undefined
+
+    const params: Stripe.InvoiceCreateParams = {
       customer: input.customer_id,
       collection_method: 'send_invoice',
-      // send_invoice には支払い期限が必須。会費請求の既定として30日を置く。
-      days_until_due: 30,
       auto_advance: false,
-      ...(input.metadata ? { metadata: input.metadata } : {}),
-    })
+    }
+    if (input.days_until_due !== undefined) params.days_until_due = input.days_until_due
 
-    await context.stripe.invoiceItems.create({
-      customer: input.customer_id,
-      pricing: { price: input.price_id },
-      invoice: invoice.id,
-    })
+    const invoice = await context.stripe.invoices.create(params, idem('create'))
 
-    const finalized = await context.stripe.invoices.finalizeInvoice(invoice.id)
+    await context.stripe.invoiceItems.create(
+      {
+        customer: input.customer_id,
+        pricing: { price: input.price_id },
+        invoice: invoice.id,
+      },
+      idem('item'),
+    )
+
+    const finalized = await context.stripe.invoices.finalizeInvoice(
+      invoice.id,
+      undefined,
+      idem('finalize'),
+    )
     if (finalized.hosted_invoice_url === null || finalized.hosted_invoice_url === undefined) {
       throw new Error('確定した Invoice に支払い URL がありません')
     }

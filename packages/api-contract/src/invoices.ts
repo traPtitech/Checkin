@@ -1,6 +1,6 @@
 import { oc } from '@orpc/contract'
 import { z } from 'zod'
-import { pagination, writableMetadata } from './params'
+import { pagination } from './params'
 
 /**
  * Invoice の公開形。Invoice は customer_email 等の PII やネストした metadata
@@ -47,12 +47,18 @@ export const invoicesContract = {
     ),
 
   // 指定した顧客に価格を1項目として請求する Invoice を作成・確定し、支払い URL を返す。
+  // traq_id はレスポンス専用のため入力では受けない(顧客との紐付けはセッション実装時に
+  // サーバ側で行う)。
   create: oc
     .input(
       z.object({
         customer_id: z.string().min(1),
         price_id: z.string().min(1),
-        metadata: writableMetadata,
+        // send_invoice の支払い期限(日数)。運用で決めるため任意。指定時のみ Stripe に渡す。
+        days_until_due: z.number().int().min(0).max(365).optional(),
+        // リトライ安全のための冪等キー(クライアントが生成)。指定時のみ Stripe に渡す。
+        // 認可導入後はサーバ側でユーザーごとに名前空間化する(#15)。
+        idempotency_key: z.string().min(1).max(255).optional(),
       }),
     )
     .output(

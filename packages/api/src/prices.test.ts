@@ -110,7 +110,7 @@ describe('prices.retrieve', () => {
 })
 
 describe('prices.update', () => {
-  it('active と metadata を Stripe に渡し、結果の metadata を traq_id だけに絞る', async () => {
+  it('active を Stripe に渡し、結果の metadata を traq_id だけに絞る', async () => {
     let capturedId: unknown
     let capturedParams: unknown
     const context = makeContext({
@@ -121,14 +121,11 @@ describe('prices.update', () => {
       },
     })
 
-    const result = await call(
-      appRouter.prices.update,
-      { id: 'price_x', active: false, metadata: { traq_id: 'carol' } },
-      { context },
-    )
+    const result = await call(appRouter.prices.update, { id: 'price_x', active: false }, { context })
 
     expect(capturedId).toBe('price_x')
-    expect(capturedParams).toStrictEqual({ active: false, metadata: { traq_id: 'carol' } })
+    expect(capturedParams).toStrictEqual({ active: false })
+    // 出力側の metadata は引き続き traq_id に絞られる(レスポンス専用)。
     expect(result.metadata).toStrictEqual({ traq_id: 'carol' })
   })
 

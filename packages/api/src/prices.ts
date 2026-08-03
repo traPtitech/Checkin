@@ -30,7 +30,6 @@ export const pricesRouter = {
   update: pub.prices.update.handler(async ({ input, context }) => {
     const params: Stripe.PriceUpdateParams = {}
     if (input.active !== undefined) params.active = input.active
-    if (input.metadata !== undefined) params.metadata = input.metadata
     return narrowMetadata(await context.stripe.prices.update(input.id, params))
   }),
 }

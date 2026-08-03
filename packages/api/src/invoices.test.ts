@@ -58,22 +58,32 @@ describe('invoices.list', () => {
 })
 
 describe('invoices.create', () => {
-  it('Invoice を作成 → 価格を項目化 → 確定して支払い URL を返す', async () => {
-    const calls: { create?: unknown, finalize?: unknown, item?: unknown } = {}
+  it('Invoice を作成 → 価格を項目化 → 確定し、各呼び出しに派生冪等キーを付けて支払い URL を返す', async () => {
+    const calls: {
+      create?: unknown
+      createOpts?: unknown
+      item?: unknown
+      itemOpts?: unknown
+      finalize?: unknown
+      finalizeOpts?: unknown
+    } = {}
     const context = testContext({
       invoices: {
-        create: (params: unknown) => {
+        create: (params: unknown, options: unknown) => {
           calls.create = params
+          calls.createOpts = options
           return Promise.resolve({ id: 'in_1' })
         },
-        finalizeInvoice: (id: unknown) => {
+        finalizeInvoice: (id: unknown, _params: unknown, options: unknown) => {
           calls.finalize = id
+          calls.finalizeOpts = options
           return Promise.resolve({ id: 'in_1', hosted_invoice_url: 'https://pay.example/in_1' })
         },
       },
       invoiceItems: {
-        create: (params: unknown) => {
+        create: (params: unknown, options: unknown) => {
           calls.item = params
+          calls.itemOpts = options
           return Promise.resolve({})
         },
       },
@@ -81,16 +91,16 @@ describe('invoices.create', () => {
 
     const result = await call(
       appRouter.invoices.create,
-      { customer_id: 'cus_1', price_id: 'price_1', metadata: { traq_id: 'z' } },
+      { customer_id: 'cus_1', price_id: 'price_1', days_until_due: 14, idempotency_key: 'idem_1' },
       { context },
     )
 
+    // send_invoice 固定、days_until_due は指定時のみ渡す。
     expect(calls.create).toStrictEqual({
       customer: 'cus_1',
       collection_method: 'send_invoice',
-      days_until_due: 30,
       auto_advance: false,
-      metadata: { traq_id: 'z' },
+      days_until_due: 14,
     })
     // 価格は pricing.price に入れ、作成済み Invoice に項目を紐付ける。
     expect(calls.item).toStrictEqual({
@@ -99,21 +109,38 @@ describe('invoices.create', () => {
       invoice: 'in_1',
     })
     expect(calls.finalize).toBe('in_1')
+    // 冪等キーは3呼び出しすべてに派生キーで渡り、フロー全体をリトライ安全にする。
+    expect(calls.createOpts).toStrictEqual({ idempotencyKey: 'idem_1:create' })
+    expect(calls.itemOpts).toStrictEqual({ idempotencyKey: 'idem_1:item' })
+    expect(calls.finalizeOpts).toStrictEqual({ idempotencyKey: 'idem_1:finalize' })
     expect(result).toStrictEqual({ invoice_id: 'in_1', payment_url: 'https://pay.example/in_1' })
   })
 
-  it('metadata 未指定なら create に metadata を含めない', async () => {
-    let capturedCreate: unknown
+  it('days_until_due / idempotency_key 未指定なら create に含めず、冪等 option も渡さない', async () => {
+    const calls: {
+      create?: unknown
+      createOpts?: unknown
+      itemOpts?: unknown
+      finalizeOpts?: unknown
+    } = {}
     const context = testContext({
       invoices: {
-        create: (params: unknown) => {
-          capturedCreate = params
+        create: (params: unknown, options: unknown) => {
+          calls.create = params
+          calls.createOpts = options
           return Promise.resolve({ id: 'in_1' })
         },
-        finalizeInvoice: () =>
-          Promise.resolve({ id: 'in_1', hosted_invoice_url: 'https://pay.example/in_1' }),
+        finalizeInvoice: (_id: unknown, _params: unknown, options: unknown) => {
+          calls.finalizeOpts = options
+          return Promise.resolve({ id: 'in_1', hosted_invoice_url: 'https://pay.example/in_1' })
+        },
       },
-      invoiceItems: { create: () => Promise.resolve({}) },
+      invoiceItems: {
+        create: (_params: unknown, options: unknown) => {
+          calls.itemOpts = options
+          return Promise.resolve({})
+        },
+      },
     })
 
     await call(
@@ -122,13 +149,14 @@ describe('invoices.create', () => {
       { context },
     )
 
-    // metadata キーが付かないことを toStrictEqual で保証する。
-    expect(capturedCreate).toStrictEqual({
+    expect(calls.create).toStrictEqual({
       customer: 'cus_1',
       collection_method: 'send_invoice',
-      days_until_due: 30,
       auto_advance: false,
     })
+    expect(calls.createOpts).toBeUndefined()
+    expect(calls.itemOpts).toBeUndefined()
+    expect(calls.finalizeOpts).toBeUndefined()
   })
 
   it('確定した Invoice に支払い URL が無ければエラーにする', async () => {
