@@ -47,7 +47,7 @@ describe('checkout.sessions.list', () => {
       status: 'complete',
       limit: 3,
     })
-    expect(result.has_more).toBe(true)
+    expect(result.next_cursor).toBe('cs_1')
     // toStrictEqual で allowlist を厳密に検証: customer_email/internal は含まれない。
     expect(result.data[0]).toStrictEqual({
       id: 'cs_1',

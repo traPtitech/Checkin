@@ -67,6 +67,8 @@ describe('products.list', () => {
     const result = await call(appRouter.products.list, {}, { context })
 
     expect(result.data[0]).toStrictEqual(productViewOf({ id: 'prod_a' }))
+    // toListResponse 経由の一覧レスポンス(has_more:false なら next_cursor:null)に配線されていることを確認。
+    expect(result.next_cursor).toBeNull()
   })
 
   it('default_price が展開オブジェクト・未設定でも ID または null に正規化する', async () => {

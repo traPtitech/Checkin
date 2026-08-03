@@ -1,7 +1,7 @@
 import type Stripe from 'stripe'
 import type { PriceView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { idOf } from './views'
+import { idOf, toListResponse } from './views'
 
 /** Stripe の Price を公開形 PriceView に変換する(公開フィールドを明示選択)。 */
 function toPriceView(price: Stripe.Price): PriceView {
@@ -33,13 +33,9 @@ export const pricesRouter = {
     if (input.type !== undefined) params.type = input.type
     if (input.limit !== undefined) params.limit = input.limit
     if (input.starting_after !== undefined) params.starting_after = input.starting_after
-    if (input.ending_before !== undefined) params.ending_before = input.ending_before
 
     const page = await context.stripe.prices.list(params)
-    return {
-      has_more: page.has_more,
-      data: page.data.map(toPriceView),
-    }
+    return toListResponse(page, toPriceView)
   }),
 
   update: pub.prices.update.handler(async ({ input, context }) =>

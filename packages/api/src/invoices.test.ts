@@ -58,6 +58,8 @@ describe('invoices.list', () => {
       created: 1680000000,
       customer: 'cus_1',
     })
+    // toListResponse 経由の一覧レスポンス(has_more:false なら next_cursor:null)に配線されていることを確認。
+    expect(result.next_cursor).toBeNull()
   })
 
   it('customer が展開オブジェクトや null でも ID(または null)に正規化する', async () => {

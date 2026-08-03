@@ -1,7 +1,7 @@
 import type Stripe from 'stripe'
 import type { CheckoutSessionView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { idOf } from './views'
+import { idOf, toListResponse } from './views'
 
 /** Stripe の Checkout Session を allowlist の View に変換する(公開フィールドを明示選択)。 */
 function toCheckoutSessionView(session: Stripe.Checkout.Session): CheckoutSessionView {
@@ -27,13 +27,9 @@ export const checkoutRouter = {
       if (input.status !== undefined) params.status = input.status
       if (input.limit !== undefined) params.limit = input.limit
       if (input.starting_after !== undefined) params.starting_after = input.starting_after
-      if (input.ending_before !== undefined) params.ending_before = input.ending_before
 
       const page = await context.stripe.checkout.sessions.list(params)
-      return {
-        has_more: page.has_more,
-        data: page.data.map(toCheckoutSessionView),
-      }
+      return toListResponse(page, toCheckoutSessionView)
     }),
   },
 }

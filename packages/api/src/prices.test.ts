@@ -51,7 +51,7 @@ describe('prices.list', () => {
 
     await call(
       appRouter.prices.list,
-      { product: 'prod_x', active: false, type: 'recurring', ending_before: 'price_first' },
+      { product: 'prod_x', active: false, type: 'recurring', starting_after: 'price_last' },
       { context },
     )
 
@@ -59,7 +59,7 @@ describe('prices.list', () => {
       product: 'prod_x',
       active: false,
       type: 'recurring',
-      ending_before: 'price_first',
+      starting_after: 'price_last',
     })
   })
 
@@ -77,7 +77,7 @@ describe('prices.list', () => {
     expect(captured).toStrictEqual({})
   })
 
-  it('has_more を引き回し、allowlist のフィールドだけを返す', async () => {
+  it('続きがあれば next_cursor に末尾 ID を返し、allowlist のフィールドだけを返す', async () => {
     const context = makeContext({
       list: () =>
         Promise.resolve({
@@ -95,8 +95,19 @@ describe('prices.list', () => {
 
     const result = await call(appRouter.prices.list, {}, { context })
 
-    expect(result.has_more).toBe(true)
+    // has_more の時、next_cursor は末尾要素の id(次回の starting_after)。
+    expect(result.next_cursor).toBe('price_a')
     expect(result.data[0]).toStrictEqual(priceViewOf({ id: 'price_a' }))
+  })
+
+  it('続きが無ければ next_cursor は null', async () => {
+    const context = makeContext({
+      list: () => Promise.resolve({ has_more: false, data: [price({ id: 'price_a' })] }),
+    })
+
+    const result = await call(appRouter.prices.list, {}, { context })
+
+    expect(result.next_cursor).toBeNull()
   })
 })
 

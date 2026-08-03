@@ -1,7 +1,7 @@
 import type Stripe from 'stripe'
 import type { InvoiceView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { idOf } from './views'
+import { idOf, toListResponse } from './views'
 
 /** Stripe の Invoice を allowlist の InvoiceView に変換する(公開フィールドを明示選択)。 */
 function toInvoiceView(invoice: Stripe.Invoice): InvoiceView {
@@ -26,13 +26,9 @@ export const invoicesRouter = {
     if (input.collection_method !== undefined) params.collection_method = input.collection_method
     if (input.limit !== undefined) params.limit = input.limit
     if (input.starting_after !== undefined) params.starting_after = input.starting_after
-    if (input.ending_before !== undefined) params.ending_before = input.ending_before
 
     const page = await context.stripe.invoices.list(params)
-    return {
-      has_more: page.has_more,
-      data: page.data.map(toInvoiceView),
-    }
+    return toListResponse(page, toInvoiceView)
   }),
 
   create: pub.invoices.create.handler(async ({ input, context }) => {

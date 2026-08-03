@@ -1,7 +1,7 @@
 import type Stripe from 'stripe'
 import type { ProductView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { idOf } from './views'
+import { idOf, toListResponse } from './views'
 
 /** Stripe の Product を公開形 ProductView に変換する(公開フィールドを明示選択)。 */
 function toProductView(product: Stripe.Product): ProductView {
@@ -22,13 +22,9 @@ export const productsRouter = {
     if (input.active !== undefined) params.active = input.active
     if (input.limit !== undefined) params.limit = input.limit
     if (input.starting_after !== undefined) params.starting_after = input.starting_after
-    if (input.ending_before !== undefined) params.ending_before = input.ending_before
 
     const page = await context.stripe.products.list(params)
-    return {
-      has_more: page.has_more,
-      data: page.data.map(toProductView),
-    }
+    return toListResponse(page, toProductView)
   }),
 
   update: pub.products.update.handler(async ({ input, context }) => {
