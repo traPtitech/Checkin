@@ -46,10 +46,9 @@ export const invoicesRouter = {
     // create のみに付けると、リトライ時に同一 Invoice へ明細が二重追加され二重請求に
     // なるため、呼び出しごとに派生キーを付ける(Stripe はキー単位で応答をキャッシュする)。
     // 認可導入後はサーバ側でユーザーごとに名前空間化する(#15)。
-    const idem = (suffix: string): { idempotencyKey: string } | undefined =>
-      input.idempotency_key !== undefined
-        ? { idempotencyKey: `${input.idempotency_key}:${suffix}` }
-        : undefined
+    const idem = (suffix: string): { idempotencyKey: string } => ({
+      idempotencyKey: `${input.idempotency_key}:${suffix}`,
+    })
 
     const params: Stripe.InvoiceCreateParams = {
       customer: input.customer,

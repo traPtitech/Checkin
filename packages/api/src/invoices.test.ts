@@ -36,12 +36,17 @@ describe('invoices.list', () => {
 
     const result = await call(
       appRouter.invoices.list,
-      { customer: 'cus_1', subscription: 'sub_1', status: 'open' },
+      { customer: 'cus_1', subscription: 'sub_1', status: 'open', collection_method: 'send_invoice' },
       { context },
     )
 
-    // customer / subscription は Stripe のキー名に写像する。
-    expect(captured).toStrictEqual({ customer: 'cus_1', subscription: 'sub_1', status: 'open' })
+    // フィルタは Stripe のキー名で透過する。
+    expect(captured).toStrictEqual({
+      customer: 'cus_1',
+      subscription: 'sub_1',
+      status: 'open',
+      collection_method: 'send_invoice',
+    })
     // toStrictEqual で allowlist を厳密に検証: customer_email/customer_name/internal、
     // および bearer URL の hosted_invoice_url は一覧の出力に含まれない。
     expect(result.data[0]).toStrictEqual({
@@ -53,6 +58,58 @@ describe('invoices.list', () => {
       created: 1680000000,
       customer: 'cus_1',
     })
+  })
+
+  it('customer が展開オブジェクトや null でも ID(または null)に正規化する', async () => {
+    const context = testContext({
+      invoices: {
+        list: () =>
+          Promise.resolve({
+            has_more: false,
+            data: [
+              // 展開された Customer オブジェクト(PII 入り)が来ても ID だけを返す。
+              stripeFixture<Stripe.Invoice>({
+                id: 'in_1',
+                status: 'paid',
+                amount_due: 0,
+                amount_paid: 1000,
+                amount_remaining: 0,
+                created: 1,
+                customer: stripeFixture<Stripe.Customer>({
+                  id: 'cus_9',
+                  email: 'leak@example.com',
+                  name: 'Leak',
+                }),
+              }),
+              // customer 無し(null)。
+              stripeFixture<Stripe.Invoice>({
+                id: 'in_2',
+                status: 'draft',
+                amount_due: 0,
+                amount_paid: 0,
+                amount_remaining: 0,
+                created: 2,
+                customer: null,
+              }),
+            ],
+          }),
+      },
+    })
+
+    const result = await call(appRouter.invoices.list, {}, { context })
+
+    expect(result.data[0]?.customer).toBe('cus_9')
+    // email/name が出力に一切現れない。
+    expect(result.data[0]).toStrictEqual({
+      id: 'in_1',
+      status: 'paid',
+      amount_due: 0,
+      amount_paid: 1000,
+      amount_remaining: 0,
+      created: 1,
+      customer: 'cus_9',
+    })
+    expect(result.data[1]?.customer).toBeNull()
   })
 })
 
@@ -115,47 +172,34 @@ describe('invoices.create', () => {
     expect(result).toStrictEqual({ invoice_id: 'in_1', payment_url: 'https://pay.example/in_1' })
   })
 
-  it('days_until_due / idempotency_key 未指定なら create に含めず、冪等 option も渡さない', async () => {
-    const calls: {
-      create?: unknown
-      createOpts?: unknown
-      itemOpts?: unknown
-      finalizeOpts?: unknown
-    } = {}
+  it('days_until_due 未指定なら create に含めない(冪等キーは必須なので常に渡る)', async () => {
+    let capturedCreate: unknown
+    let capturedCreateOpts: unknown
     const context = testContext({
       invoices: {
         create: (params: unknown, options: unknown) => {
-          calls.create = params
-          calls.createOpts = options
+          capturedCreate = params
+          capturedCreateOpts = options
           return Promise.resolve({ id: 'in_1' })
         },
-        finalizeInvoice: (_id: unknown, _params: unknown, options: unknown) => {
-          calls.finalizeOpts = options
-          return Promise.resolve({ id: 'in_1', hosted_invoice_url: 'https://pay.example/in_1' })
-        },
+        finalizeInvoice: () =>
+          Promise.resolve({ id: 'in_1', hosted_invoice_url: 'https://pay.example/in_1' }),
       },
-      invoiceItems: {
-        create: (_params: unknown, options: unknown) => {
-          calls.itemOpts = options
-          return Promise.resolve({})
-        },
-      },
+      invoiceItems: { create: () => Promise.resolve({}) },
     })
 
     await call(
       appRouter.invoices.create,
-      { customer: 'cus_1', price: 'price_1' },
+      { customer: 'cus_1', price: 'price_1', idempotency_key: 'idem_1' },
       { context },
     )
 
-    expect(calls.create).toStrictEqual({
+    expect(capturedCreate).toStrictEqual({
       customer: 'cus_1',
       collection_method: 'send_invoice',
       auto_advance: false,
     })
-    expect(calls.createOpts).toBeUndefined()
-    expect(calls.itemOpts).toBeUndefined()
-    expect(calls.finalizeOpts).toBeUndefined()
+    expect(capturedCreateOpts).toStrictEqual({ idempotencyKey: 'idem_1:create' })
   })
 
   it('確定した Invoice に支払い URL が無ければエラーにする', async () => {
@@ -170,7 +214,7 @@ describe('invoices.create', () => {
     await expect(
       call(
         appRouter.invoices.create,
-        { customer: 'cus_1', price: 'price_1' },
+        { customer: 'cus_1', price: 'price_1', idempotency_key: 'idem_1' },
         { context },
       ),
     ).rejects.toThrow()

@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { appRouter } from './router'
 import { stripeFixture, testContext } from './test-utils'
 
-describe('checkout.listSessions', () => {
-  it('フィルタを Stripe に写像し、allowlist のフィールドだけを返す', async () => {
+describe('checkout.sessions.list', () => {
+  it('フィルタを Stripe に透過し、allowlist のフィールドだけを返す', async () => {
     let captured: unknown
     const context = testContext({
       checkout: {
@@ -40,7 +40,7 @@ describe('checkout.listSessions', () => {
       { context },
     )
 
-    // customer / payment_intent は Stripe のキー名に写像する。
+    // customer / payment_intent は Stripe のキー名で透過する。
     expect(captured).toStrictEqual({
       customer: 'cus_1',
       payment_intent: 'pi_1',

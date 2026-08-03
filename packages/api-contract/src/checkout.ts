@@ -1,6 +1,6 @@
 import { oc } from '@orpc/contract'
 import { z } from 'zod'
-import { pagination } from './params'
+import { listEnvelope, pagination } from './params'
 
 /**
  * Checkout Session の公開形。Session は customer_details 等の PII を含むため、
@@ -22,7 +22,7 @@ const checkoutSessionView = z.object({
 export type CheckoutSessionView = z.infer<typeof checkoutSessionView>
 
 export const checkoutContract = {
-  // Stripe SDK の stripe.checkout.sessions.list に合わせた構造(checkout.sessions.list)。
+  // Stripe SDK の `stripe.checkout.sessions.list` に構造を合わせている。
   sessions: {
     // 一覧。入力は選択的透過(params.ts 参照)。各要素は allowlist の View。
     list: oc
@@ -35,11 +35,6 @@ export const checkoutContract = {
           ...pagination,
         }),
       )
-      .output(
-        z.object({
-          has_more: z.boolean(),
-          data: z.array(checkoutSessionView),
-        }),
-      ),
+      .output(listEnvelope(checkoutSessionView)),
   },
 }

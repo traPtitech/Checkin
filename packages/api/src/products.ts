@@ -1,6 +1,19 @@
 import type Stripe from 'stripe'
+import type { ProductView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { omitMetadata } from './views'
+import { idOf } from './views'
+
+/** Stripe の Product を公開形 ProductView に変換する(公開フィールドを明示選択)。 */
+function toProductView(product: Stripe.Product): ProductView {
+  return {
+    id: product.id,
+    active: product.active,
+    name: product.name,
+    description: product.description,
+    default_price: idOf(product.default_price ?? null),
+    created: product.created,
+  }
+}
 
 /** 商品プロシージャ — Stripe の Product を Checkin API として公開する。 */
 export const productsRouter = {
@@ -14,7 +27,7 @@ export const productsRouter = {
     const page = await context.stripe.products.list(params)
     return {
       has_more: page.has_more,
-      data: page.data.map(product => omitMetadata(product)),
+      data: page.data.map(toProductView),
     }
   }),
 
@@ -24,6 +37,6 @@ export const productsRouter = {
     if (input.name !== undefined) params.name = input.name
     if (input.description !== undefined) params.description = input.description
 
-    return omitMetadata(await context.stripe.products.update(input.id, params))
+    return toProductView(await context.stripe.products.update(input.id, params))
   }),
 }

@@ -1,23 +1,29 @@
 import { oc } from '@orpc/contract'
 import { z } from 'zod'
-import type Stripe from 'stripe'
-import { pagination } from './params'
+import { listEnvelope, pagination } from './params'
 
-/** Product の公開形。Stripe の Product を透過するが metadata は公開しない(理由は PriceView 参照)。 */
-export type ProductView = Omit<Stripe.Product, 'metadata'>
+/**
+ * Product の公開形。Stripe SDK の型を露出せず、公開するフィールドだけを明示列挙する。
+ * default_price は ID のみ。
+ */
+const productView = z.object({
+  id: z.string(),
+  active: z.boolean(),
+  name: z.string(),
+  description: z.string().nullable(),
+  default_price: z.string().nullable(),
+  created: z.number(),
+})
+
+export type ProductView = z.infer<typeof productView>
 
 export const productsContract = {
-  // 一覧。入力は選択的透過(params.ts 参照)。各要素は ProductView。
+  // 一覧。入力は選択的透過(params.ts 参照)。
   list: oc
     .input(z.object({ active: z.boolean().optional(), ...pagination }))
-    .output(
-      z.object({
-        has_more: z.boolean(),
-        data: z.array(z.custom<ProductView>()),
-      }),
-    ),
+    .output(listEnvelope(productView)),
 
-  // 更新。traq_id はレスポンス専用(サーバ由来)のため入力では受けない。
+  // 更新。少なくとも1フィールドの指定を要求する。
   update: oc
     .input(
       z
@@ -32,5 +38,5 @@ export const productsContract = {
           { message: '更新するフィールドを少なくとも1つ指定してください' },
         ),
     )
-    .output(z.custom<ProductView>()),
+    .output(productView),
 }

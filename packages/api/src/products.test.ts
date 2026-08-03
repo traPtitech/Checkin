@@ -4,6 +4,31 @@ import { describe, expect, it } from 'vitest'
 import { appRouter } from './router'
 import { stripeFixture, testContext } from './test-utils'
 
+/** 公開対象フィールドを埋めた Product フィクスチャ。 */
+function product(overrides: Partial<Stripe.Product>): Stripe.Product {
+  return stripeFixture<Stripe.Product>({
+    id: 'prod_x',
+    active: true,
+    name: '部費',
+    description: null,
+    default_price: 'price_1',
+    created: 1680000000,
+    ...overrides,
+  })
+}
+
+function productViewOf(o: Record<string, unknown> = {}) {
+  return {
+    id: 'prod_x',
+    active: true,
+    name: '部費',
+    description: null,
+    default_price: 'price_1',
+    created: 1680000000,
+    ...o,
+  }
+}
+
 describe('products.list', () => {
   it('active フィルタとページネーションを Stripe に渡す', async () => {
     let captured: unknown
@@ -20,10 +45,33 @@ describe('products.list', () => {
 
     expect(captured).toStrictEqual({ active: true, limit: 5 })
   })
+
+  it('allowlist のフィールドだけを返す', async () => {
+    const context = testContext({
+      products: {
+        list: () =>
+          Promise.resolve({
+            has_more: false,
+            data: [
+              product({
+                id: 'prod_a',
+                // allowlist されない Stripe フィールド。出力に出てはいけない。
+                livemode: true,
+                metadata: { internal: 'secret' },
+              }),
+            ],
+          }),
+      },
+    })
+
+    const result = await call(appRouter.products.list, {}, { context })
+
+    expect(result.data[0]).toStrictEqual(productViewOf({ id: 'prod_a' }))
+  })
 })
 
 describe('products.update', () => {
-  it('指定フィールドを Stripe に渡し、結果に metadata を含めない', async () => {
+  it('指定フィールドを Stripe に渡し、ProductView を返す', async () => {
     let capturedId: unknown
     let capturedParams: unknown
     const context = testContext({
@@ -31,9 +79,7 @@ describe('products.update', () => {
         update: (id: unknown, params: unknown) => {
           capturedId = id
           capturedParams = params
-          return Promise.resolve(
-            stripeFixture<Stripe.Product>({ metadata: { traq_id: 'prod', internal: 'secret' } }),
-          )
+          return Promise.resolve(product({ name: '新会費', description: null }))
         },
       },
     })
@@ -47,13 +93,12 @@ describe('products.update', () => {
     expect(capturedId).toBe('prod_x')
     // active は未指定なので渡さない。description の null は透過する。
     expect(capturedParams).toStrictEqual({ name: '新会費', description: null })
-    // 透過だが metadata は出力しない(traq_id は自前 DB 単一ソースのため)。
-    expect(result).toStrictEqual({ id: 'obj_x' })
+    expect(result).toStrictEqual(productViewOf({ name: '新会費' }))
   })
 
   it('更新フィールドを1つも指定しなければ reject する', async () => {
     const context = testContext({
-      products: { update: () => Promise.resolve(stripeFixture<Stripe.Product>({})) },
+      products: { update: () => Promise.resolve(product({})) },
     })
 
     await expect(

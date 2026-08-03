@@ -1,11 +1,26 @@
 import type Stripe from 'stripe'
+import type { PriceView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { omitMetadata } from './views'
+import { idOf } from './views'
+
+/** Stripe の Price を公開形 PriceView に変換する(公開フィールドを明示選択)。 */
+function toPriceView(price: Stripe.Price): PriceView {
+  return {
+    id: price.id,
+    product: idOf(price.product),
+    active: price.active,
+    currency: price.currency,
+    unit_amount: price.unit_amount,
+    type: price.type,
+    nickname: price.nickname,
+    created: price.created,
+  }
+}
 
 /** 価格プロシージャ — Stripe の Price を Checkin API として公開する。 */
 export const pricesRouter = {
   retrieve: pub.prices.retrieve.handler(async ({ input, context }) =>
-    omitMetadata(await context.stripe.prices.retrieve(input.id)),
+    toPriceView(await context.stripe.prices.retrieve(input.id)),
   ),
 
   list: pub.prices.list.handler(async ({ input, context }) => {
@@ -23,13 +38,11 @@ export const pricesRouter = {
     const page = await context.stripe.prices.list(params)
     return {
       has_more: page.has_more,
-      data: page.data.map(price => omitMetadata(price)),
+      data: page.data.map(toPriceView),
     }
   }),
 
-  update: pub.prices.update.handler(async ({ input, context }) => {
-    const params: Stripe.PriceUpdateParams = {}
-    if (input.active !== undefined) params.active = input.active
-    return omitMetadata(await context.stripe.prices.update(input.id, params))
-  }),
+  update: pub.prices.update.handler(async ({ input, context }) =>
+    toPriceView(await context.stripe.prices.update(input.id, { active: input.active })),
+  ),
 }

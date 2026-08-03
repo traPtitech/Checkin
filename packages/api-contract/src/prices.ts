@@ -1,23 +1,30 @@
 import { oc } from '@orpc/contract'
 import { z } from 'zod'
-import type Stripe from 'stripe'
-import { pagination } from './params'
+import { listEnvelope, pagination } from './params'
 
 /**
- * Price の公開形。Stripe の Price を透過するが metadata は公開しない。metadata は
- * Checkin 独自の traq_id を持たせる用途しかなく、その traq_id は Stripe ではなく
- * 自前 DB を単一ソースとして持つため(出力で必要になれば customer→DB 逆引きで解決、#18)。
+ * Price の公開形。Stripe SDK の型を露出せず、公開するフィールドだけを明示列挙する
+ * (契約を決済プロバイダの実装から切り離すため)。product は ID のみ。
  */
-export type PriceView = Omit<Stripe.Price, 'metadata'>
+const priceView = z.object({
+  id: z.string(),
+  product: z.string().nullable(),
+  active: z.boolean(),
+  currency: z.string(),
+  unit_amount: z.number().nullable(),
+  // 将来プロバイダ側が値を増やしても落ちないよう enum で狭めない。
+  type: z.string(),
+  nickname: z.string().nullable(),
+  created: z.number(),
+})
+
+export type PriceView = z.infer<typeof priceView>
 
 export const pricesContract = {
-  // 単一の Price を PriceView として返す。
-  retrieve: oc
-    .input(z.object({ id: z.string().min(1) }))
-    .output(z.custom<PriceView>()),
+  // 単一の Price を返す。
+  retrieve: oc.input(z.object({ id: z.string().min(1) })).output(priceView),
 
-  // 一覧。エンベロープ(has_more/data)は自前 zod で構造検証し、各要素は PriceView。
-  // 入力は選択的透過(params.ts 参照)。
+  // 一覧。入力は選択的透過(params.ts 参照)。
   list: oc
     .input(
       z.object({
@@ -27,22 +34,10 @@ export const pricesContract = {
         ...pagination,
       }),
     )
-    .output(
-      z.object({
-        has_more: z.boolean(),
-        data: z.array(z.custom<PriceView>()),
-      }),
-    ),
+    .output(listEnvelope(priceView)),
 
-  // 更新。traq_id はレスポンス専用(サーバ由来)のため入力では受けない。
+  // 更新。更新可能なのは active のみ(必須)。
   update: oc
-    .input(
-      z
-        .object({
-          id: z.string().min(1),
-          active: z.boolean().optional(),
-        })
-        .refine(v => v.active !== undefined, { message: 'active を指定してください' }),
-    )
-    .output(z.custom<PriceView>()),
+    .input(z.object({ id: z.string().min(1), active: z.boolean() }))
+    .output(priceView),
 }

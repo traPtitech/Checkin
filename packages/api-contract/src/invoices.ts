@@ -1,6 +1,6 @@
 import { oc } from '@orpc/contract'
 import { z } from 'zod'
-import { pagination } from './params'
+import { listEnvelope, pagination } from './params'
 
 /**
  * Invoice の公開形。Invoice は customer_email 等の PII やネストした metadata
@@ -10,8 +10,7 @@ import { pagination } from './params'
  * (必要になれば customer→DB 逆引きで足す、#18)。実装は @checkin/api で明示的に組み立てる。
  *
  * hosted_invoice_url は一覧には含めない。これは認証不要で請求内容の閲覧・支払いが
- * できる bearer URL であり、一覧で配る必要がない(send_invoice では Stripe が顧客へ
- * メールでリンクを送る。作成時は create の payment_url で返す)。
+ * できる bearer URL のため。作成時は create の payment_url として返す。
  */
 const invoiceView = z.object({
   id: z.string(),
@@ -39,26 +38,19 @@ export const invoicesContract = {
         ...pagination,
       }),
     )
-    .output(
-      z.object({
-        has_more: z.boolean(),
-        data: z.array(invoiceView),
-      }),
-    ),
+    .output(listEnvelope(invoiceView)),
 
   // 指定した顧客に価格を1項目として請求する Invoice を作成・確定し、支払い URL を返す。
-  // traq_id はレスポンス専用のため入力では受けない(顧客との紐付けはセッション実装時に
-  // サーバ側で行う)。
   create: oc
     .input(
       z.object({
         customer: z.string().min(1),
         price: z.string().min(1),
-        // send_invoice の支払い期限(日数)。運用で決めるため任意。指定時のみ Stripe に渡す。
+        // 支払い期限(日数)。運用で決めるため任意。指定時のみ渡す。
         days_until_due: z.number().int().min(0).max(365).optional(),
-        // リトライ安全のための冪等キー(クライアントが生成)。指定時のみ Stripe に渡す。
-        // 認可導入後はサーバ側でユーザーごとに名前空間化する(#15)。
-        idempotency_key: z.string().min(1).max(255).optional(),
+        // リトライ安全のための冪等キー(クライアント生成)。多段フロー全体を安全に
+        // 再試行できるよう必須にする。認可導入後はサーバ側で名前空間化する(#15)。
+        idempotency_key: z.string().min(1).max(255),
       }),
     )
     .output(

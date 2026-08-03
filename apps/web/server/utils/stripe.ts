@@ -4,6 +4,13 @@ let cached: Stripe | undefined
 
 /** サーバーインスタンスごとに Stripe クライアントを1つだけ遅延生成し、再利用する。 */
 export function useStripe(): Stripe {
-  cached ??= new Stripe(useRuntimeConfig().stripeSecretKey)
+  if (cached === undefined) {
+    const secretKey = useRuntimeConfig().stripeSecretKey
+    // 未設定なら生成時に明示エラーにする(Stripe 呼び出し時の不透明な失敗を避ける)。
+    if (secretKey === '') {
+      throw new Error('STRIPE_SECRET_KEY (NUXT_STRIPE_SECRET_KEY) が設定されていません')
+    }
+    cached = new Stripe(secretKey)
+  }
   return cached
 }
