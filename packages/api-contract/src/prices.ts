@@ -3,8 +3,11 @@ import { z } from 'zod'
 import { listEnvelope, pagination } from './params'
 
 /**
- * Price の公開形。Stripe SDK の型を露出せず、公開するフィールドだけを明示列挙する
- * (契約を決済プロバイダの実装から切り離すため)。product は ID のみ。
+ * Price の公開形。公開するフィールドだけを明示列挙する allowlist。目的は、PII や
+ * 内部フィールド・将来 Stripe が増やすフィールドを出力に漏らさないこと(セキュリティ)と、
+ * クライアント向けの安定した契約。フィールドの形状・語彙は意図的に Stripe に合わせており、
+ * 決済プロバイダ移行の容易化を主目的とはしない(移行時は入力語彙・カーソル・ハンドラも
+ * 書き換えが要る)。product は ID のみ。
  */
 const priceView = z.object({
   id: z.string(),

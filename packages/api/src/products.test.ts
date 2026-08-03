@@ -68,6 +68,26 @@ describe('products.list', () => {
 
     expect(result.data[0]).toStrictEqual(productViewOf({ id: 'prod_a' }))
   })
+
+  it('default_price が展開オブジェクト・未設定でも ID または null に正規化する', async () => {
+    const context = testContext({
+      products: {
+        list: () =>
+          Promise.resolve({
+            has_more: false,
+            data: [
+              product({ id: 'prod_a', default_price: stripeFixture<Stripe.Price>({ id: 'price_9' }) }),
+              product({ id: 'prod_b', default_price: undefined }),
+            ],
+          }),
+      },
+    })
+
+    const result = await call(appRouter.products.list, {}, { context })
+
+    expect(result.data[0]?.default_price).toBe('price_9')
+    expect(result.data[1]?.default_price).toBeNull()
+  })
 })
 
 describe('products.update', () => {

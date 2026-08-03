@@ -10,7 +10,10 @@ export function useStripe(): Stripe {
     if (secretKey === '') {
       throw new Error('STRIPE_SECRET_KEY (NUXT_STRIPE_SECRET_KEY) が設定されていません')
     }
-    cached = new Stripe(secretKey)
+    // apiVersion を SDK が生成された版に明示ピンする。省略するとアカウントの既定
+    // API バージョンに従い、SDK の型と実行時のレスポンス形状がズレ得るため。
+    // SDK を更新すると LatestApiVersion 型が変わり、この文字列が型エラーになって気づける。
+    cached = new Stripe(secretKey, { apiVersion: '2026-07-29.dahlia' })
   }
   return cached
 }

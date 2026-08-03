@@ -110,6 +110,25 @@ describe('prices.retrieve', () => {
 
     expect(result).toStrictEqual(priceViewOf())
   })
+
+  it('product が展開オブジェクトでも ID に正規化する(PII を出さない)', async () => {
+    const context = makeContext({
+      retrieve: () =>
+        Promise.resolve(
+          price({
+            product: stripeFixture<Stripe.Product>({
+              id: 'prod_9',
+              name: '秘密',
+              metadata: { internal: 'secret' },
+            }),
+          }),
+        ),
+    })
+
+    const result = await call(appRouter.prices.retrieve, { id: 'price_x' }, { context })
+
+    expect(result).toStrictEqual(priceViewOf({ product: 'prod_9' }))
+  })
 })
 
 describe('prices.update', () => {
@@ -129,5 +148,14 @@ describe('prices.update', () => {
     expect(capturedId).toBe('price_x')
     expect(capturedParams).toStrictEqual({ active: false })
     expect(result).toStrictEqual(priceViewOf({ active: false }))
+  })
+
+  it('active 未指定なら reject する(active は必須)', async () => {
+    const context = makeContext({ update: () => Promise.resolve(price({})) })
+
+    await expect(
+      // @ts-expect-error active は必須のため意図的に省略している
+      call(appRouter.prices.update, { id: 'price_x' }, { context }),
+    ).rejects.toThrow()
   })
 })

@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { listEnvelope, pagination } from './params'
 
 /**
- * Product の公開形。Stripe SDK の型を露出せず、公開するフィールドだけを明示列挙する。
- * default_price は ID のみ。
+ * Product の公開形。公開するフィールドだけを明示列挙する allowlist(理由は PriceView 参照:
+ * PII・内部/将来フィールドを漏らさないセキュリティと、安定契約が目的)。default_price は ID のみ。
  */
 const productView = z.object({
   id: z.string(),

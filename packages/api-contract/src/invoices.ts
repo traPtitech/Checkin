@@ -50,7 +50,9 @@ export const invoicesContract = {
         days_until_due: z.number().int().min(0).max(365).optional(),
         // リトライ安全のための冪等キー(クライアント生成)。多段フロー全体を安全に
         // 再試行できるよう必須にする。認可導入後はサーバ側で名前空間化する(#15)。
-        idempotency_key: z.string().min(1).max(255),
+        // 実装は末尾に ":finalize"(9文字)等の suffix を連結して Stripe に渡すため、
+        // Stripe の上限 255 文字を超えないよう 246 文字までに制限する。
+        idempotency_key: z.string().min(1).max(246),
       }),
     )
     .output(

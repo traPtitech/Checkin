@@ -59,4 +59,42 @@ describe('checkout.sessions.list', () => {
       payment_intent: 'pi_1',
     })
   })
+
+  it('customer / payment_intent が展開オブジェクトでも ID に正規化する(PII を出さない)', async () => {
+    const context = testContext({
+      checkout: {
+        sessions: {
+          list: () =>
+            Promise.resolve({
+              has_more: false,
+              data: [
+                stripeFixture<Stripe.Checkout.Session>({
+                  id: 'cs_1',
+                  status: 'complete',
+                  amount_total: 1,
+                  amount_subtotal: 1,
+                  created: 1,
+                  customer: stripeFixture<Stripe.Customer>({ id: 'cus_9', email: 'leak@example.com' }),
+                  payment_intent: stripeFixture<Stripe.PaymentIntent>({ id: 'pi_9' }),
+                }),
+              ],
+            }),
+        },
+      },
+    })
+
+    const result = await call(appRouter.checkout.sessions.list, {}, { context })
+
+    expect(result.data[0]?.customer).toBe('cus_9')
+    expect(result.data[0]?.payment_intent).toBe('pi_9')
+    expect(result.data[0]).toStrictEqual({
+      id: 'cs_1',
+      status: 'complete',
+      amount_total: 1,
+      amount_subtotal: 1,
+      created: 1,
+      customer: 'cus_9',
+      payment_intent: 'pi_9',
+    })
+  })
 })
