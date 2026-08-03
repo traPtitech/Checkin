@@ -106,9 +106,6 @@ importers:
       '@orpc/contract':
         specifier: ^1.14.13
         version: 1.14.13
-      stripe:
-        specifier: ^22.4.0
-        version: 22.4.0(@types/node@24.13.3)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
