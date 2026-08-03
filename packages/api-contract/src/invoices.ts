@@ -32,8 +32,8 @@ export const invoicesContract = {
   list: oc
     .input(
       z.object({
-        customer_id: z.string().min(1).optional(),
-        subscription_id: z.string().min(1).optional(),
+        customer: z.string().min(1).optional(),
+        subscription: z.string().min(1).optional(),
         status: z.enum(['draft', 'open', 'paid', 'uncollectible', 'void']).optional(),
         collection_method: z.enum(['charge_automatically', 'send_invoice']).optional(),
         ...pagination,
@@ -52,8 +52,8 @@ export const invoicesContract = {
   create: oc
     .input(
       z.object({
-        customer_id: z.string().min(1),
-        price_id: z.string().min(1),
+        customer: z.string().min(1),
+        price: z.string().min(1),
         // send_invoice の支払い期限(日数)。運用で決めるため任意。指定時のみ Stripe に渡す。
         days_until_due: z.number().int().min(0).max(365).optional(),
         // リトライ安全のための冪等キー(クライアントが生成)。指定時のみ Stripe に渡す。

@@ -18,7 +18,7 @@ export const pricesContract = {
   list: oc
     .input(
       z.object({
-        product_id: z.string().min(1).optional(),
+        product: z.string().min(1).optional(),
         active: z.boolean().optional(),
         type: z.enum(['one_time', 'recurring']).optional(),
         ...pagination,

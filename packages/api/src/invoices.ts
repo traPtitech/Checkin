@@ -21,8 +21,8 @@ function toInvoiceView(invoice: Stripe.Invoice): InvoiceView {
 export const invoicesRouter = {
   list: pub.invoices.list.handler(async ({ input, context }) => {
     const params: Stripe.InvoiceListParams = {}
-    if (input.customer_id) params.customer = input.customer_id
-    if (input.subscription_id) params.subscription = input.subscription_id
+    if (input.customer) params.customer = input.customer
+    if (input.subscription) params.subscription = input.subscription
     if (input.status !== undefined) params.status = input.status
     if (input.collection_method !== undefined) params.collection_method = input.collection_method
     if (input.limit !== undefined) params.limit = input.limit
@@ -53,7 +53,7 @@ export const invoicesRouter = {
         : undefined
 
     const params: Stripe.InvoiceCreateParams = {
-      customer: input.customer_id,
+      customer: input.customer,
       collection_method: 'send_invoice',
       auto_advance: false,
     }
@@ -63,8 +63,8 @@ export const invoicesRouter = {
 
     await context.stripe.invoiceItems.create(
       {
-        customer: input.customer_id,
-        pricing: { price: input.price_id },
+        customer: input.customer,
+        pricing: { price: input.price },
         invoice: invoice.id,
       },
       idem('item'),

@@ -15,7 +15,7 @@ function price(overrides: Partial<Stripe.Price>): Stripe.Price {
 }
 
 describe('prices.list', () => {
-  it('product_id を Stripe の product フィルタに変換して渡す', async () => {
+  it('product を Stripe の product フィルタに変換して渡す', async () => {
     let captured: unknown
     const context = makeContext({
       list: (arg: unknown) => {
@@ -24,12 +24,12 @@ describe('prices.list', () => {
       },
     })
 
-    await call(appRouter.prices.list, { product_id: 'prod_x' }, { context })
+    await call(appRouter.prices.list, { product: 'prod_x' }, { context })
 
     expect(captured).toStrictEqual({ product: 'prod_x' })
   })
 
-  it('product_id 未指定なら空フィルタで呼ぶ', async () => {
+  it('product 未指定なら空フィルタで呼ぶ', async () => {
     let captured: unknown
     const context = makeContext({
       list: (arg: unknown) => {
@@ -57,7 +57,7 @@ describe('prices.list', () => {
     expect(captured).toStrictEqual({ limit: 20, starting_after: 'price_last' })
   })
 
-  it('product_id とページネーションを併せて渡す', async () => {
+  it('product とページネーションを併せて渡す', async () => {
     let captured: unknown
     const context = makeContext({
       list: (arg: unknown) => {
@@ -68,7 +68,7 @@ describe('prices.list', () => {
 
     await call(
       appRouter.prices.list,
-      { product_id: 'prod_x', limit: 20, starting_after: 'price_last' },
+      { product: 'prod_x', limit: 20, starting_after: 'price_last' },
       { context },
     )
 

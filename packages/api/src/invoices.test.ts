@@ -36,11 +36,11 @@ describe('invoices.list', () => {
 
     const result = await call(
       appRouter.invoices.list,
-      { customer_id: 'cus_1', subscription_id: 'sub_1', status: 'open' },
+      { customer: 'cus_1', subscription: 'sub_1', status: 'open' },
       { context },
     )
 
-    // customer_id / subscription_id は Stripe のキー名に写像する。
+    // customer / subscription は Stripe のキー名に写像する。
     expect(captured).toStrictEqual({ customer: 'cus_1', subscription: 'sub_1', status: 'open' })
     // toStrictEqual で allowlist を厳密に検証: customer_email/customer_name/internal、
     // および bearer URL の hosted_invoice_url は一覧の出力に含まれない。
@@ -91,7 +91,7 @@ describe('invoices.create', () => {
 
     const result = await call(
       appRouter.invoices.create,
-      { customer_id: 'cus_1', price_id: 'price_1', days_until_due: 14, idempotency_key: 'idem_1' },
+      { customer: 'cus_1', price: 'price_1', days_until_due: 14, idempotency_key: 'idem_1' },
       { context },
     )
 
@@ -145,7 +145,7 @@ describe('invoices.create', () => {
 
     await call(
       appRouter.invoices.create,
-      { customer_id: 'cus_1', price_id: 'price_1' },
+      { customer: 'cus_1', price: 'price_1' },
       { context },
     )
 
@@ -171,7 +171,7 @@ describe('invoices.create', () => {
     await expect(
       call(
         appRouter.invoices.create,
-        { customer_id: 'cus_1', price_id: 'price_1' },
+        { customer: 'cus_1', price: 'price_1' },
         { context },
       ),
     ).rejects.toThrow()

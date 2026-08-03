@@ -13,7 +13,7 @@ export const pricesRouter = {
     // (通すとネストした product.metadata 等の漏洩経路になる)。続きがあれば
     // フロントが data 末尾の Price ID を次回の starting_after に渡してページ送りする。
     const params: Stripe.PriceListParams = {}
-    if (input.product_id) params.product = input.product_id
+    if (input.product) params.product = input.product
     if (input.active !== undefined) params.active = input.active
     if (input.type !== undefined) params.type = input.type
     if (input.limit !== undefined) params.limit = input.limit

@@ -23,21 +23,24 @@ const checkoutSessionView = z.object({
 export type CheckoutSessionView = z.infer<typeof checkoutSessionView>
 
 export const checkoutContract = {
-  // Checkout Session 一覧。入力は選択的透過(params.ts 参照)。各要素は allowlist の View。
-  listSessions: oc
-    .input(
-      z.object({
-        customer_id: z.string().min(1).optional(),
-        subscription_id: z.string().min(1).optional(),
-        payment_intent_id: z.string().min(1).optional(),
-        status: z.enum(['open', 'complete', 'expired']).optional(),
-        ...pagination,
-      }),
-    )
-    .output(
-      z.object({
-        has_more: z.boolean(),
-        data: z.array(checkoutSessionView),
-      }),
-    ),
+  // Stripe SDK の stripe.checkout.sessions.list に合わせた構造(checkout.sessions.list)。
+  sessions: {
+    // 一覧。入力は選択的透過(params.ts 参照)。各要素は allowlist の View。
+    list: oc
+      .input(
+        z.object({
+          customer: z.string().min(1).optional(),
+          subscription: z.string().min(1).optional(),
+          payment_intent: z.string().min(1).optional(),
+          status: z.enum(['open', 'complete', 'expired']).optional(),
+          ...pagination,
+        }),
+      )
+      .output(
+        z.object({
+          has_more: z.boolean(),
+          data: z.array(checkoutSessionView),
+        }),
+      ),
+  },
 }

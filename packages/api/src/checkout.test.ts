@@ -35,12 +35,12 @@ describe('checkout.listSessions', () => {
     })
 
     const result = await call(
-      appRouter.checkout.listSessions,
-      { customer_id: 'cus_1', payment_intent_id: 'pi_1', status: 'complete', limit: 3 },
+      appRouter.checkout.sessions.list,
+      { customer: 'cus_1', payment_intent: 'pi_1', status: 'complete', limit: 3 },
       { context },
     )
 
-    // customer_id / payment_intent_id は Stripe のキー名に写像する。
+    // customer / payment_intent は Stripe のキー名に写像する。
     expect(captured).toStrictEqual({
       customer: 'cus_1',
       payment_intent: 'pi_1',
