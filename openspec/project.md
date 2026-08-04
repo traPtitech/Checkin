@@ -51,27 +51,36 @@ packages/db            Drizzle スキーマ、MariaDB クライアント、マ�
 - クライアントはコントラクト(`@checkin/api-contract`)を `@orpc/contract` の
   `ContractRouterClient` で型付けしてインポートする — `apps/web` の UI コードに
   `@checkin/api`(サーバー実装)を絶対にインポートしないこと。
-- API 層のフィールド名は camelCase に統一する。消費側(TypeScript / Vue)と DB 層(drizzle も
-  camelCase)の慣習に揃える。出力を allowlist で全フィールド手書きしている今、Stripe の snake_case は
-  ハンドラの変換層で camelCase の View 名に対応づける(入力フィールドも同様に Stripe のパラメータ名へ
-  変換して渡す)。Stripe の enum の値(`one_time`・`send_invoice` 等)はフィールド名ではなくデータ値
-  なので変換しない。
-- 出力は allowlist にする: 各リソースの公開 View(`packages/api-contract/src/*.ts`)は
-  公開するフィールドだけを `z.object` で明示列挙し、外部プロバイダのオブジェクトを透過しない。
-  目的は PII・内部・将来増えるフィールドを漏らさないこと(セキュリティ)と、クライアント向けの
-  安定した契約。フィールドの語彙は現状 Stripe に合わせているが、決済プロバイダの移行容易化は
-  目的としない(移行するなら入力語彙・カーソル・ハンドラの書き換えも要る)。
-- 入力は選択的透過にする: 各プロシージャが対応するパラメータだけを受け付ける。とくに `expand` は
-  受け付けない(ネストした `product.metadata` 等の漏洩経路になるため)。未知キーは zod が除去する。
-- ユーザー同定(traq_id)は自前 DB を単一ソースとし、Stripe の metadata には持たせない。
-  そのため API 出力に traq_id は含めない。必要になった時点で customer ID から DB を逆引きして
-  解決する(#18)。
-- 公開 View の文字列フィールド(status・type 等)は Stripe の値をそのまま透過し、enum で
-  狭めない。将来 Stripe が値集合を増やしても契約が壊れないため。一方、入力フィルタ側は既知値に
-  enum で狭めてよい。
-- 現状すべてのプロシージャは無認証(`pub`)。無認証での決済系書き込みを避けるため、変更系
-  (作成・更新)は既定で無効化し(`mutationsEnabled` / `assertMutationsEnabled`)、認可(#15)の
-  導入時に本来の認可チェックへ置き換える。
+- API 層のフィールド名は camelCase に統一する。この API を消費するのは型付き oRPC クライアント
+  経由の TypeScript / Vue コードで、契約の型が `result.unitAmount` のようにそのまま参照される。
+  camelCase は JS/TS のプロパティ命名の標準なので、クライアント側での読み替えや命名 lint の抑制なしに
+  自然に扱える。対抗案は snake_case(Stripe ドキュメントと名前が一致する)だったが、出力を allowlist に
+  して全フィールドを手書きする以上 Stripe との一致は自動では得られず、その利点は小さい。ハンドラの
+  変換層で Stripe の snake_case を camelCase の View 名へ、入力も Stripe パラメータ名へ変換する。
+  Stripe の enum の値(`one_time`・`send_invoice` 等)はフィールド名でなくデータ値なので変換しない。
+- 出力は allowlist にする。Stripe オブジェクトをそのまま透過すると、customer_email 等の PII・内部
+  フラグ・将来 Stripe が追加するフィールドが、レビューを経ずに公開契約へ流れ込む。公開 View を
+  `z.object` で明示列挙すれば、露出する各フィールドが意図的な選択になり、Stripe 側の追加は既定では
+  契約に入らない(opt-in)。代償はリソースごとの変換コードだが、漏洩を型で締める価値が上回る。
+  フィールドの語彙は Stripe に合わせるが、決済プロバイダの移行容易化は目的にしない(移行時は入力語彙・
+  カーソル・ハンドラの書き換えも要るため、allowlist だけでは移植性は得られない)。
+- 入力は選択的透過にする。とくに `expand` は受け付けない。expand を通すと Stripe がネストした
+  オブジェクト(`product.metadata` 等)をレスポンスに展開し、出力 allowlist を迂回して PII や内部
+  データが漏れる経路になるため。対応済みのパラメータだけを明示的に受け、未知キーは zod が除去する。
+- ユーザー同定(traq_id)は自前 DB を単一ソースとし、Stripe metadata には持たせない/出力もしない。
+  metadata に持たせないのは、Stripe metadata がクライアントから書き換え可能で権威を持てず、同定の
+  根拠にすると偽装や不整合の余地が生じるため。出力にも載せないのは、traq_id が Stripe を経由しない内部の
+  同定子で、決済 API のレスポンスに出すと customer ID ↔ traq_id の対応が利用者に露出して名寄せ・相関の
+  攻撃面を広げる一方、現在この値を必要とする消費者が無いため。必要時は DB を正本に customer ID から
+  逆引きする(#18)。
+- 公開 View の文字列フィールド(status・type 等)は Stripe の値をそのまま透過し、enum で狭めない。
+  出力を今日の値集合で `z.enum` に固定すると、Stripe が新しい値を追加した時に正当な Stripe オブジェクトを
+  出力検証が弾いて 500 になり、実データで壊れる。`z.string()` なら新値も通る。入力フィルタは自分が受理
+  する値を決められるので enum で狭めてよい。
+- 現状すべてのプロシージャは無認証(`pub`)。変更系(作成・更新)は既定で無効化する
+  (`mutationsEnabled` / `assertMutationsEnabled`)。無認証のまま変更系を出すと、デプロイ済みの main では
+  「到達できない」ことだけが歯止めになり、Invoice 確定のような金銭・破壊的操作を誰でも叩ける。既定オフで
+  fail-closed にし、認可(#15)導入時に本来のチェックへ置き換える。
 - ビルドを常にグリーンに保つこと: `pnpm lint`、`pnpm knip`、`pnpm typecheck`、`pnpm test`、
   `pnpm build`。
 
