@@ -3,18 +3,15 @@ import { z } from 'zod'
 import { listEnvelope, pagination } from './params'
 
 /**
- * Invoice の公開形。Invoice は customer_email 等の PII やネストした metadata
- * (lines[].metadata 等)を含むため、Stripe オブジェクトを透過せず、公開する
- * フィールドを allowlist で明示する。customer は ID のみ(PII オブジェクトは出さない)。
- * traq_id は出力に含めない(同定データは DB を単一ソースとする方針。project.md / #18)。
+ * Invoice の公開 View。出力 allowlist の方針は project.md 参照。Invoice は customer_email 等の
+ * PII やネストした metadata(lines[].metadata 等)を含むため、透過には特に注意する。customer は
+ * ID のみ。traq_id は出力に含めない(project.md / #18)。
  *
- * hosted_invoice_url は一覧には含めない。これは認証不要で請求内容の閲覧・支払いが
- * できる bearer URL のため。作成時は create の payment_url として返す。
+ * hosted_invoice_url は一覧には含めない。認証不要で請求内容の閲覧・支払いができる bearer URL の
+ * ため。作成時は create の payment_url として返す。
  */
 const invoiceView = z.object({
   id: z.string(),
-  // 出力は Stripe の値をそのまま公開する(将来 Stripe が追加する status で
-  // 落ちないよう enum で狭めない)。入力フィルタ側は enum で狭める。
   status: z.string().nullable(),
   amount_due: z.number(),
   amount_paid: z.number(),
@@ -48,10 +45,9 @@ export const invoicesContract = {
         // 支払い期限(日数)。collection_method を send_invoice に固定しており、Stripe は
         // send_invoice の Invoice 確定時に支払い期限を要求するため必須。
         days_until_due: z.number().int().min(0).max(365),
-        // リトライ安全のための冪等キー(クライアント生成)。多段フロー全体を安全に
-        // 再試行できるよう必須にする。認可導入後はサーバ側で名前空間化する(#15)。
-        // 実装は末尾に ":finalize"(9文字)等の suffix を連結して Stripe に渡すため、
-        // Stripe の上限 255 文字を超えないよう 246 文字までに制限する。
+        // リトライ安全のための冪等キー(クライアント生成)。多段フロー全体を安全に再試行できるよう
+        // 必須にする。派生キーの suffix 予約分(最大9文字)を Stripe の 255 文字上限内に収めるため、
+        // 246 文字までに制限する。
         idempotency_key: z.string().min(1).max(246),
       }),
     )

@@ -5,7 +5,7 @@ import { appRouter } from './router'
 import { stripeFixture, testContext } from './test-utils'
 
 describe('invoices.list', () => {
-  it('フィルタを Stripe のキー名に写像し、allowlist のフィールドだけを返す', async () => {
+  it('フィルタを Stripe のキー名に対応づけ、allowlist のフィールドだけを返す', async () => {
     let captured: unknown
     const context = testContext({
       invoices: {
@@ -194,7 +194,7 @@ describe('invoices.create', () => {
       { context },
     )
 
-    // 0 はフォールシーだが正当な入力。truthy 判定への退行で黙って落ちないことを固定する。
+    // 0 は falsy だが正当な入力。truthy 判定への退行で黙って落ちないことを固定する。
     expect(capturedCreate).toStrictEqual({
       customer: 'cus_1',
       collection_method: 'send_invoice',
@@ -231,7 +231,7 @@ describe('invoices.create', () => {
     ).rejects.toThrow()
   })
 
-  // 実装は hosted_invoice_url の null と undefined の両方をエラーにする。両腕を個別に行使する。
+  // 実装は hosted_invoice_url の null と undefined の両方をエラーにする。両ケースを個別に検証する。
   it.each([
     ['null', null],
     ['undefined(プロパティ不在)', undefined],

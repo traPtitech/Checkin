@@ -11,10 +11,7 @@ import { contract } from '@checkin/api-contract'
 export interface Context {
   db: Database
   stripe: Stripe
-  /**
-   * 変更系(作成・更新)を許可するか。現状は全プロシージャが無認証のため、認可
-   * (#15)が入るまでの暫定措置として、既定でこれを false にして変更系を塞ぐ。
-   */
+  /** 変更系(作成・更新)を許可するか。方針は project.md、機構は assertMutationsEnabled を参照。 */
   mutationsEnabled: boolean
 }
 

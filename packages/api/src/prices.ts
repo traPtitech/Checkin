@@ -24,9 +24,6 @@ export const pricesRouter = {
   ),
 
   list: pub.prices.list.handler(async ({ input, context }) => {
-    // 選択的透過: 対応するパラメータだけを Stripe に渡す。expand は通さない
-    // (通すとネストした product.metadata 等の漏洩経路になる)。続きがあれば
-    // フロントが data 末尾の Price ID を次回の starting_after に渡してページ送りする。
     const params: Stripe.PriceListParams = {}
     if (input.product) params.product = input.product
     if (input.active !== undefined) params.active = input.active

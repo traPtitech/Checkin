@@ -2,11 +2,7 @@ import { oc } from '@orpc/contract'
 import { z } from 'zod'
 import { listEnvelope, pagination } from './params'
 
-/**
- * Price の公開形。公開するフィールドだけを明示列挙する allowlist。PII や内部フィールド・
- * 将来 Stripe が増やすフィールドを出力に漏らさず(セキュリティ)、クライアント向けに安定した
- * 契約を保つのが目的。フィールドの語彙は Stripe に合わせている。product は ID のみ。
- */
+/** Price の公開 View。出力 allowlist の方針は project.md 参照。product は ID のみ。 */
 const priceView = z.object({
   id: z.string(),
   // Price.product は Stripe 上で必ず存在する(削除済みでも id は残る)ため非 null。
@@ -14,7 +10,6 @@ const priceView = z.object({
   active: z.boolean(),
   currency: z.string(),
   unit_amount: z.number().nullable(),
-  // 将来プロバイダ側が値を増やしても落ちないよう enum で狭めない。
   type: z.string(),
   nickname: z.string().nullable(),
   created: z.number(),

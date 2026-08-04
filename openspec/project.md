@@ -59,6 +59,12 @@ packages/db            Drizzle スキーマ、MariaDB クライアント、マ�
 - ユーザー同定(traq_id)は自前 DB を単一ソースとし、Stripe の metadata には持たせない。
   そのため API 出力に traq_id は含めない。必要になった時点で customer ID から DB を逆引きして
   解決する(#18)。
+- 公開 View の文字列フィールド(status・type 等)は Stripe の値をそのまま透過し、enum で
+  狭めない。将来 Stripe が値集合を増やしても契約が壊れないため。一方、入力フィルタ側は既知値に
+  enum で狭めてよい。
+- 現状すべてのプロシージャは無認証(`pub`)。無認証での決済系書き込みを避けるため、変更系
+  (作成・更新)は既定で無効化し(`mutationsEnabled` / `assertMutationsEnabled`)、認可(#15)の
+  導入時に本来の認可チェックへ置き換える。
 - ビルドを常にグリーンに保つこと: `pnpm lint`、`pnpm knip`、`pnpm typecheck`、`pnpm test`、
   `pnpm build`。
 

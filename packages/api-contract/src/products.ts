@@ -2,10 +2,7 @@ import { oc } from '@orpc/contract'
 import { z } from 'zod'
 import { listEnvelope, pagination } from './params'
 
-/**
- * Product の公開形。公開するフィールドだけを明示列挙する allowlist(理由は PriceView 参照:
- * PII・内部/将来フィールドを漏らさないセキュリティと、安定契約が目的)。default_price は ID のみ。
- */
+/** Product の公開 View。出力 allowlist の方針は project.md 参照。default_price は ID のみ。 */
 const productView = z.object({
   id: z.string(),
   active: z.boolean(),

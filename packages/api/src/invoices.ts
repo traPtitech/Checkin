@@ -32,7 +32,6 @@ export const invoicesRouter = {
   }),
 
   create: pub.invoices.create.handler(async ({ input, context }) => {
-    // 無認証で Invoice を確定させないための暫定ガード(#15 の認可で置き換える)。
     assertMutationsEnabled(context)
 
     // Invoice を作成 → 価格を項目として追加 → 確定して Stripe がホストする支払い URL を得る。

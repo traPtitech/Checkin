@@ -3,14 +3,12 @@ import { z } from 'zod'
 import { listEnvelope, pagination } from './params'
 
 /**
- * Checkout Session の公開形。Session は customer_details 等の PII を含むため、
- * Stripe オブジェクトを透過せず、公開するフィールドを allowlist で明示する。
- * customer / payment_intent は ID のみ。traq_id は出力に含めない
- * (同定データは DB を単一ソースとする方針。project.md / #18)。
+ * Checkout Session の公開 View。出力 allowlist の方針は project.md 参照。Session は
+ * customer_details 等の PII を含む。customer / payment_intent は ID のみ。traq_id は
+ * 出力に含めない(project.md / #18)。
  */
 const checkoutSessionView = z.object({
   id: z.string(),
-  // 出力は Stripe の値をそのまま公開する(将来の status で落ちないよう enum で狭めない)。
   status: z.string().nullable(),
   amount_total: z.number().nullable(),
   amount_subtotal: z.number().nullable(),
