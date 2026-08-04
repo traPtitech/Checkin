@@ -56,6 +56,9 @@ packages/db            Drizzle スキーマ、MariaDB クライアント、マ�
   目的は PII・内部・将来増えるフィールドを漏らさないこと(セキュリティ)と、クライアント向けの
   安定した契約。フィールドの語彙は現状 Stripe に合わせているが、決済プロバイダの移行容易化は
   目的としない(移行するなら入力語彙・カーソル・ハンドラの書き換えも要る)。
+- ユーザー同定(traq_id)は自前 DB を単一ソースとし、Stripe の metadata には持たせない。
+  そのため API 出力に traq_id は含めない。必要になった時点で customer ID から DB を逆引きして
+  解決する(#18)。
 - ビルドを常にグリーンに保つこと: `pnpm lint`、`pnpm knip`、`pnpm typecheck`、`pnpm test`、
   `pnpm build`。
 

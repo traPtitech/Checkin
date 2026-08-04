@@ -6,8 +6,7 @@ import { listEnvelope, pagination } from './params'
  * Invoice の公開形。Invoice は customer_email 等の PII やネストした metadata
  * (lines[].metadata 等)を含むため、Stripe オブジェクトを透過せず、公開する
  * フィールドを allowlist で明示する。customer は ID のみ(PII オブジェクトは出さない)。
- * traq_id は Stripe metadata ではなく自前 DB を単一ソースとするため出力に含めない
- * (必要になれば customer→DB 逆引きで足す、#18)。実装は @checkin/api で明示的に組み立てる。
+ * traq_id は出力に含めない(同定データは DB を単一ソースとする方針。project.md / #18)。
  *
  * hosted_invoice_url は一覧には含めない。これは認証不要で請求内容の閲覧・支払いが
  * できる bearer URL のため。作成時は create の payment_url として返す。
