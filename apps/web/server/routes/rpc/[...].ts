@@ -7,13 +7,18 @@ export default defineEventHandler(async (event) => {
   const { matched, response } = await handler.handle(toWebRequest(event), {
     prefix: '/rpc',
     context: {
-      // データベースハンドルの生成・キャッシュ戦略は useDatabase を参照。
-      // oRPC はリクエストのたびに context.db を参照するため、health.check
-      // のような DB 不要なプロシージャでも DATABASE_URL の設定が必須になる
-      // — このゲッターは生成を遅延させるだけで、プロシージャごとの条件分岐は行わない。
+      // データベースハンドル・Stripe クライアントの生成とキャッシュは useDatabase /
+      // useStripe を参照。ゲッターにしておくことで、実際にその依存を使うプロシージャが
+      // 呼ばれたときだけ遅延生成される。db は現状どのプロシージャも参照しないが、将来の
+      // ドメイン機能(会員・会計)のために Context に用意しておく。
       get db() {
         return useDatabase()
       },
+      get stripe() {
+        return useStripe()
+      },
+      // 変更系ガードのフラグ。既定 false で無認証の書き込みを塞ぐ(#15 で認可に置き換え)。
+      mutationsEnabled: useRuntimeConfig().enableUnsafeMutations,
     },
   })
 

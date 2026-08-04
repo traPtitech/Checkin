@@ -26,6 +26,18 @@ export default withNuxt({
     'vue/multi-word-component-names': 'off',
   },
 }, {
+  // server/plugins は Nitro が起動時に自動登録するもので、他コードから静的に import されない。
+  // そのため typescript-eslint の projectService が所有 tsconfig を見つけられず解析に失敗する
+  // (utils/routes は生成コードから参照され app プログラムに入るので問題にならない)。この
+  // ディレクトリだけ Nitro のサーバー tsconfig を明示し、型を考慮したルールを解決させる。
+  files: ['apps/web/server/plugins/**/*.ts'],
+  languageOptions: {
+    parserOptions: {
+      projectService: false,
+      project: ['./apps/web/.nuxt/tsconfig.server.json'],
+    },
+  },
+}, {
   rules: {
     // 本物の診断用途である warn/error は許可する。log/debug/info はコミットに残すべきではない。
     'no-console': ['error', { allow: ['warn', 'error'] }],
@@ -55,6 +67,10 @@ export default withNuxt({
     // フォールスルーしてしまい、falsy だが有効な値を黙って上書きしてしまう。
     '@typescript-eslint/prefer-nullish-coalescing': 'error',
     '@typescript-eslint/prefer-optional-chain': 'error',
+    // `as` 型アサーションは型チェッカーを迂回し、実際とズレた型を黙って通すため
+    // 原則禁止する(const アサーション `as const` は本ルールが常に許可)。テストの
+    // スタブなど安全が確認できる箇所のみ、理由を添えて eslint-disable で個別に許可する。
+    '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
   },
 },
 // flat/recommended には、ルールだけでなく languageOptions.globals に
