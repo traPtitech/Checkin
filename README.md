@@ -33,17 +33,16 @@ openspec/         OpenSpec の仕様と変更提案
 
 ```bash
 pnpm install
-cp .env.example .env        # 必須 — `pnpm dev` の前に DATABASE_URL を設定すること
+cp .env.example .env        # `pnpm dev` の前に必要な値を設定すること
 
 docker compose up -d        # MariaDB を起動
 pnpm db:migrate             # マイグレーションを適用
 pnpm dev                    # Nuxt 開発サーバー → http://localhost:3000
 ```
 
-ホームページは `health.check` oRPC プロシージャを呼び出し、フロント → Nitro → oRPC の疎通を
-確認する。`health.check` 自体はデータベースに問い合わせないが、oRPC の全リクエストで
-`context.db` が解決されるため、`DATABASE_URL` が未設定だとホームページで 500 エラーが発生する
-— 先に `.env` をコピーしておくこと。
+ホームページは静的で oRPC は呼び出さない。API のプロシージャ(価格・商品・請求・Checkout)は
+Stripe を呼ぶため `STRIPE_SECRET_KEY` が要る。`DATABASE_URL` はマイグレーションと将来のドメイン
+機能で使う。
 
 ## スクリプト
 

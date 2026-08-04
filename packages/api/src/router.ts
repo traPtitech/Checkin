@@ -11,9 +11,6 @@ import { productsRouter } from './products'
  * プロシージャは機能(capability)単位でグループ化しておくこと。
  */
 export const appRouter = pub.router({
-  health: {
-    check: pub.health.check.handler(() => ({ ok: true, timestamp: new Date().toISOString() })),
-  },
   prices: pricesRouter,
   products: productsRouter,
   invoices: invoicesRouter,

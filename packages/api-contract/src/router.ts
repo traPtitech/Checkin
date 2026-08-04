@@ -1,5 +1,4 @@
 import { checkoutContract } from './checkout'
-import { healthContract } from './health'
 import { invoicesContract } from './invoices'
 import { pricesContract } from './prices'
 import { productsContract } from './products'
@@ -10,7 +9,6 @@ import { productsContract } from './products'
  * 実装すべき仕様であり、クライアントがリンクする型でもある。
  */
 export const contract = {
-  health: healthContract,
   prices: pricesContract,
   products: productsContract,
   invoices: invoicesContract,

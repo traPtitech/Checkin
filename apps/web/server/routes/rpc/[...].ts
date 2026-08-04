@@ -7,10 +7,10 @@ export default defineEventHandler(async (event) => {
   const { matched, response } = await handler.handle(toWebRequest(event), {
     prefix: '/rpc',
     context: {
-      // データベースハンドル・Stripe クライアントの生成とキャッシュは
-      // useDatabase / useStripe を参照。ゲッターにしておくことで、実際に
-      // その依存を使うプロシージャが呼ばれたときだけ遅延生成される
-      // (health.check のように両方不要なプロシージャでは生成されない)。
+      // データベースハンドル・Stripe クライアントの生成とキャッシュは useDatabase /
+      // useStripe を参照。ゲッターにしておくことで、実際にその依存を使うプロシージャが
+      // 呼ばれたときだけ遅延生成される。db は現状どのプロシージャも参照しないが、将来の
+      // ドメイン機能(会員・会計)のために Context に用意しておく。
       get db() {
         return useDatabase()
       },
