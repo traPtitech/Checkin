@@ -31,7 +31,7 @@ export const invoicesRouter = {
     return toListResponse(page, toInvoiceView)
   }),
 
-  create: pub.invoices.create.handler(async ({ input, context }) => {
+  issue: pub.invoices.issue.handler(async ({ input, context }) => {
     assertMutationsEnabled(context)
 
     // Invoice を作成 → 価格を項目として追加 → 確定して Stripe がホストする支払い URL を得る。

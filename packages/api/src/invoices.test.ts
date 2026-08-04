@@ -115,7 +115,7 @@ describe('invoices.list', () => {
   })
 })
 
-describe('invoices.create', () => {
+describe('invoices.issue', () => {
   it('Invoice を作成 → 価格を項目化 → 確定し、各呼び出しに派生冪等キーを付けて支払い URL を返す', async () => {
     const calls: {
       create?: unknown
@@ -148,7 +148,7 @@ describe('invoices.create', () => {
     })
 
     const result = await call(
-      appRouter.invoices.create,
+      appRouter.invoices.issue,
       { customer: 'cus_1', price: 'price_1', daysUntilDue: 14, idempotencyKey: 'idem_1' },
       { context },
     )
@@ -189,7 +189,7 @@ describe('invoices.create', () => {
     })
 
     await call(
-      appRouter.invoices.create,
+      appRouter.invoices.issue,
       { customer: 'cus_1', price: 'price_1', daysUntilDue: 0, idempotencyKey: 'idem_1' },
       { context },
     )
@@ -211,7 +211,7 @@ describe('invoices.create', () => {
 
     await expect(
       call(
-        appRouter.invoices.create,
+        appRouter.invoices.issue,
         // @ts-expect-error daysUntilDue は必須のため意図的に省略している
         { customer: 'cus_1', price: 'price_1', idempotencyKey: 'idem_1' },
         { context },
@@ -224,7 +224,7 @@ describe('invoices.create', () => {
 
     await expect(
       call(
-        appRouter.invoices.create,
+        appRouter.invoices.issue,
         { customer: 'cus_1', price: 'price_1', daysUntilDue: 14, idempotencyKey: 'idem_1' },
         { context },
       ),
@@ -248,7 +248,7 @@ describe('invoices.create', () => {
 
     await expect(
       call(
-        appRouter.invoices.create,
+        appRouter.invoices.issue,
         { customer: 'cus_1', price: 'price_1', daysUntilDue: 14, idempotencyKey: 'idem_1' },
         { context },
       ),

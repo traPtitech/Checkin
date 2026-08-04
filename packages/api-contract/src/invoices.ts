@@ -8,7 +8,7 @@ import { listEnvelope, pagination } from './params'
  * ID のみ。traq_id は出力に含めない(project.md / #18)。
  *
  * hosted_invoice_url は一覧には含めない。認証不要で請求内容の閲覧・支払いができる bearer URL の
- * ため。作成時は create の payment_url として返す。
+ * ため。発行時は issue の paymentUrl として返す。
  */
 const invoiceView = z.object({
   id: z.string(),
@@ -36,8 +36,10 @@ export const invoicesContract = {
     )
     .output(listEnvelope(invoiceView)),
 
-  // 指定した顧客に価格を1項目として請求する Invoice を作成・確定し、支払い URL を返す。
-  create: oc
+  // 指定した顧客に価格を1項目として請求する Invoice を作成・確定(発行)し、支払い URL を返す。
+  // create ではなく issue: このプロシージャは下書き作成でなく、支払い可能な請求の発行という
+  // 金銭的な確定操作であることを名前で表す。
+  issue: oc
     .input(
       z.object({
         customer: z.string().min(1),
