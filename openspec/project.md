@@ -51,6 +51,11 @@ packages/db            Drizzle スキーマ、MariaDB クライアント、マ�
 - クライアントはコントラクト(`@checkin/api-contract`)を `@orpc/contract` の
   `ContractRouterClient` で型付けしてインポートする — `apps/web` の UI コードに
   `@checkin/api`(サーバー実装)を絶対にインポートしないこと。
+- 出力は allowlist にする: 各リソースの公開 View(`packages/api-contract/src/*.ts`)は
+  公開するフィールドだけを `z.object` で明示列挙し、外部プロバイダのオブジェクトを透過しない。
+  目的は PII・内部・将来増えるフィールドを漏らさないこと(セキュリティ)と、クライアント向けの
+  安定した契約。フィールドの語彙は現状 Stripe に合わせているが、決済プロバイダの移行容易化は
+  目的としない(移行するなら入力語彙・カーソル・ハンドラの書き換えも要る)。
 - ビルドを常にグリーンに保つこと: `pnpm lint`、`pnpm knip`、`pnpm typecheck`、`pnpm test`、
   `pnpm build`。
 
