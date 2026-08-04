@@ -15,6 +15,9 @@ const productView = z.object({
 export type ProductView = z.infer<typeof productView>
 
 export const productsContract = {
+  // 単一の Product を返す。
+  retrieve: oc.input(z.object({ id: z.string().min(1) })).output(productView),
+
   // 一覧。入力は選択的透過(params.ts 参照)。
   list: oc
     .input(z.object({ active: z.boolean().optional(), ...pagination }))

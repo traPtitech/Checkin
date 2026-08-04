@@ -92,6 +92,35 @@ describe('products.list', () => {
   })
 })
 
+describe('products.retrieve', () => {
+  it('公開フィールドだけの ProductView を返す', async () => {
+    const context = testContext({
+      products: {
+        retrieve: () => Promise.resolve(product({ livemode: true, metadata: { internal: 'secret' } })),
+      },
+    })
+
+    const result = await call(appRouter.products.retrieve, { id: 'prod_x' }, { context })
+
+    expect(result).toStrictEqual(productViewOf())
+  })
+
+  it('default_price が展開オブジェクトでも ID に正規化する(PII を出さない)', async () => {
+    const context = testContext({
+      products: {
+        retrieve: () =>
+          Promise.resolve(
+            product({ default_price: stripeFixture<Stripe.Price>({ id: 'price_9', nickname: '秘密' }) }),
+          ),
+      },
+    })
+
+    const result = await call(appRouter.products.retrieve, { id: 'prod_x' }, { context })
+
+    expect(result).toStrictEqual(productViewOf({ defaultPrice: 'price_9' }))
+  })
+})
+
 describe('products.update', () => {
   it('指定フィールドを Stripe に渡し、ProductView を返す', async () => {
     let capturedId: unknown

@@ -17,6 +17,10 @@ function toProductView(product: Stripe.Product): ProductView {
 
 /** 商品プロシージャ — Stripe の Product を Checkin API として公開する。 */
 export const productsRouter = {
+  retrieve: pub.products.retrieve.handler(async ({ input, context }) =>
+    toProductView(await context.stripe.products.retrieve(input.id)),
+  ),
+
   list: pub.products.list.handler(async ({ input, context }) => {
     const params: Stripe.ProductListParams = {}
     if (input.active !== undefined) params.active = input.active
