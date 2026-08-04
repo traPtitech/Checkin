@@ -36,7 +36,7 @@ export const invoicesRouter = {
     // collection_method は明示的に send_invoice(リンク払い)に固定する。既定の
     // charge_automatically だと finalize 時点で顧客の既定支払い方法へ自動課金され得るが、
     // このエンドポイントは支払い URL を返すリンク払いを意図しているため。
-    // days_until_due は運用で決めるため入力任意(send_invoice で送るなら指定が必要)。
+    // days_until_due(支払い期限)は send_invoice の確定に必須のため契約で必須化しており、常に渡す。
     //
     // idempotency_key はこのフロー全体(3回の Stripe 呼び出し)をリトライ安全にする。
     // create のみに付けると、リトライ時に同一 Invoice へ明細が二重追加され二重請求に
@@ -50,8 +50,8 @@ export const invoicesRouter = {
       customer: input.customer,
       collection_method: 'send_invoice',
       auto_advance: false,
+      days_until_due: input.days_until_due,
     }
-    if (input.days_until_due !== undefined) params.days_until_due = input.days_until_due
 
     const invoice = await context.stripe.invoices.create(params, idem('create'))
 

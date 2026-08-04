@@ -153,7 +153,7 @@ describe('invoices.create', () => {
       { context },
     )
 
-    // send_invoice 固定、days_until_due は指定時のみ渡す。
+    // send_invoice 固定、days_until_due は必須で常に渡す。
     expect(calls.create).toStrictEqual({
       customer: 'cus_1',
       collection_method: 'send_invoice',
@@ -174,14 +174,12 @@ describe('invoices.create', () => {
     expect(result).toStrictEqual({ invoice_id: 'in_1', payment_url: 'https://pay.example/in_1' })
   })
 
-  it('days_until_due 未指定なら create に含めない(冪等キーは必須なので常に渡る)', async () => {
+  it('days_until_due:0(即時期限)も 0 のまま create に渡す', async () => {
     let capturedCreate: unknown
-    let capturedCreateOpts: unknown
     const context = testContext({
       invoices: {
-        create: (params: unknown, options: unknown) => {
+        create: (params: unknown) => {
           capturedCreate = params
-          capturedCreateOpts = options
           return Promise.resolve({ id: 'in_1' })
         },
         finalizeInvoice: () =>
@@ -192,23 +190,46 @@ describe('invoices.create', () => {
 
     await call(
       appRouter.invoices.create,
-      { customer: 'cus_1', price: 'price_1', idempotency_key: 'idem_1' },
+      { customer: 'cus_1', price: 'price_1', days_until_due: 0, idempotency_key: 'idem_1' },
       { context },
     )
 
+    // 0 はフォールシーだが正当な入力。truthy 判定への退行で黙って落ちないことを固定する。
     expect(capturedCreate).toStrictEqual({
       customer: 'cus_1',
       collection_method: 'send_invoice',
       auto_advance: false,
+      days_until_due: 0,
     })
-    expect(capturedCreateOpts).toStrictEqual({ idempotencyKey: 'idem_1:create' })
   })
 
-  it('確定した Invoice に支払い URL が無ければエラーにする', async () => {
+  it('days_until_due 未指定は reject する(send_invoice 固定のため必須)', async () => {
+    const context = testContext({
+      invoices: { create: () => Promise.resolve({ id: 'in_1' }) },
+      invoiceItems: { create: () => Promise.resolve({}) },
+    })
+
+    await expect(
+      call(
+        appRouter.invoices.create,
+        // @ts-expect-error days_until_due は必須のため意図的に省略している
+        { customer: 'cus_1', price: 'price_1', idempotency_key: 'idem_1' },
+        { context },
+      ),
+    ).rejects.toThrow()
+  })
+
+  // 実装は hosted_invoice_url の null と undefined の両方をエラーにする。両腕を個別に行使する。
+  it.each([
+    ['null', null],
+    ['undefined(プロパティ不在)', undefined],
+  ])('確定した Invoice の支払い URL が %s ならエラーにする', async (_label, url) => {
     const context = testContext({
       invoices: {
         create: () => Promise.resolve({ id: 'in_1' }),
-        finalizeInvoice: () => Promise.resolve({ id: 'in_1', hosted_invoice_url: null }),
+        // url が undefined のケースは hosted_invoice_url キー自体を含めないオブジェクトを返す。
+        finalizeInvoice: () =>
+          Promise.resolve(url === undefined ? { id: 'in_1' } : { id: 'in_1', hosted_invoice_url: url }),
       },
       invoiceItems: { create: () => Promise.resolve({}) },
     })
@@ -216,7 +237,7 @@ describe('invoices.create', () => {
     await expect(
       call(
         appRouter.invoices.create,
-        { customer: 'cus_1', price: 'price_1', idempotency_key: 'idem_1' },
+        { customer: 'cus_1', price: 'price_1', days_until_due: 14, idempotency_key: 'idem_1' },
         { context },
       ),
     ).rejects.toThrow()

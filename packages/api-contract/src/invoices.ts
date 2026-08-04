@@ -45,8 +45,9 @@ export const invoicesContract = {
       z.object({
         customer: z.string().min(1),
         price: z.string().min(1),
-        // 支払い期限(日数)。運用で決めるため任意。指定時のみ渡す。
-        days_until_due: z.number().int().min(0).max(365).optional(),
+        // 支払い期限(日数)。collection_method を send_invoice に固定しており、Stripe は
+        // send_invoice の Invoice 確定時に支払い期限を要求するため必須。
+        days_until_due: z.number().int().min(0).max(365),
         // リトライ安全のための冪等キー(クライアント生成)。多段フロー全体を安全に
         // 再試行できるよう必須にする。認可導入後はサーバ側で名前空間化する(#15)。
         // 実装は末尾に ":finalize"(9文字)等の suffix を連結して Stripe に渡すため、
