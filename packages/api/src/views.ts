@@ -1,10 +1,18 @@
 /**
- * Stripe の展開可能な参照(customer, product, payment_intent 等)から ID だけを取り出す。
- * expand しない前提では文字列 ID だが、型は string | オブジェクト | null なので
- * PII を含むオブジェクトを出さないよう ID に正規化する。
+ * Stripe の展開可能な参照(customer, payment_intent, default_price 等)から ID だけを取り出す。
+ * expand しない前提では文字列 ID だが、型は string | オブジェクト | null | undefined なので
+ * PII を含むオブジェクトを出さないよう ID に正規化する。参照が無い場合は null。
  */
-export function idOf(ref: string | { id: string } | null): string | null {
-  if (ref === null) return null
+export function idOf(ref: string | { id: string } | null | undefined): string | null {
+  if (ref === null || ref === undefined) return null
+  return typeof ref === 'string' ? ref : ref.id
+}
+
+/**
+ * null にならない展開参照(例: Price.product は string | Product | DeletedProduct で必ず存在する)
+ * を ID に正規化する。戻り値を string に保ち、View 側の不要な nullable を防ぐ。
+ */
+export function requireIdOf(ref: string | { id: string }): string {
   return typeof ref === 'string' ? ref : ref.id
 }
 

@@ -9,7 +9,8 @@ import { listEnvelope, pagination } from './params'
  */
 const priceView = z.object({
   id: z.string(),
-  product: z.string().nullable(),
+  // Price.product は Stripe 上で必ず存在する(削除済みでも id は残る)ため非 null。
+  product: z.string(),
   active: z.boolean(),
   currency: z.string(),
   unit_amount: z.number().nullable(),

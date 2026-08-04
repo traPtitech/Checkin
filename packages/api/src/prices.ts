@@ -1,13 +1,13 @@
 import type Stripe from 'stripe'
 import type { PriceView } from '@checkin/api-contract'
 import { pub } from './orpc'
-import { idOf, toListResponse } from './views'
+import { requireIdOf, toListResponse } from './views'
 
 /** Stripe の Price を公開形 PriceView に変換する(公開フィールドを明示選択)。 */
 function toPriceView(price: Stripe.Price): PriceView {
   return {
     id: price.id,
-    product: idOf(price.product),
+    product: requireIdOf(price.product),
     active: price.active,
     currency: price.currency,
     unit_amount: price.unit_amount,

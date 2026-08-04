@@ -10,7 +10,7 @@ function toProductView(product: Stripe.Product): ProductView {
     active: product.active,
     name: product.name,
     description: product.description,
-    default_price: idOf(product.default_price ?? null),
+    default_price: idOf(product.default_price),
     created: product.created,
   }
 }
