@@ -51,11 +51,16 @@ packages/db            Drizzle スキーマ、MariaDB クライアント、マ�
 - クライアントはコントラクト(`@checkin/api-contract`)を `@orpc/contract` の
   `ContractRouterClient` で型付けしてインポートする — `apps/web` の UI コードに
   `@checkin/api`(サーバー実装)を絶対にインポートしないこと。
+- API 層のフィールド名は snake_case に統一する。DB 層(drizzle は `createdAt` 等の camelCase)
+  とは別の規約で、Stripe 由来のフィールド(`unit_amount`・`has_more` 等)が snake_case で
+  不可避なため、レスポンス内の一貫性を優先する。ドメイン系のエンドポイントも snake_case。
 - 出力は allowlist にする: 各リソースの公開 View(`packages/api-contract/src/*.ts`)は
   公開するフィールドだけを `z.object` で明示列挙し、外部プロバイダのオブジェクトを透過しない。
   目的は PII・内部・将来増えるフィールドを漏らさないこと(セキュリティ)と、クライアント向けの
   安定した契約。フィールドの語彙は現状 Stripe に合わせているが、決済プロバイダの移行容易化は
   目的としない(移行するなら入力語彙・カーソル・ハンドラの書き換えも要る)。
+- 入力は選択的透過にする: 各プロシージャが対応するパラメータだけを受け付ける。とくに `expand` は
+  受け付けない(ネストした `product.metadata` 等の漏洩経路になるため)。未知キーは zod が除去する。
 - ユーザー同定(traq_id)は自前 DB を単一ソースとし、Stripe の metadata には持たせない。
   そのため API 出力に traq_id は含めない。必要になった時点で customer ID から DB を逆引きして
   解決する(#18)。
