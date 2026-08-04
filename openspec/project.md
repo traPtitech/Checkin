@@ -81,6 +81,14 @@ packages/db            Drizzle スキーマ、MariaDB クライアント、マ�
   (`mutationsEnabled` / `assertMutationsEnabled`)。無認証のまま変更系を出すと、デプロイ済みの main では
   「到達できない」ことだけが歯止めになり、Invoice 確定のような金銭・破壊的操作を誰でも叩ける。既定オフで
   fail-closed にし、認可(#15)導入時に本来のチェックへ置き換える。
+- API の消費者は現状 `apps/web` の型付きクライアントのみで、契約とクライアントは常に同時
+  デプロイされる。この前提(内部専用・co-deploy)を確定し、破壊的変更を許容してバージョニング
+  機構は持たない。外部消費者を許すなら、その時点で互換性維持ポリシーを別途定める。
+- 現状の Stripe 系エンドポイント(prices・products・invoices・checkout)は Stripe を allowlist で
+  薄く包む管理・配管層であって、会員向けのドメイン API ではない。`customer` や checkout session は
+  Stripe の概念そのものなので、会員向けには「会費を払う・自分の支払い状況」といったドメイン言語の
+  API を別に建て、Stripe をバックエンドの裏に隠す(#27/#28/#35)。フロントがこの Stripe 形状の上に
+  会員向け UX を直接組むと密結合が固まるので避ける。
 - ビルドを常にグリーンに保つこと: `pnpm lint`、`pnpm knip`、`pnpm typecheck`、`pnpm test`、
   `pnpm build`。
 
