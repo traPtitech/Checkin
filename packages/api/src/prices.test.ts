@@ -169,4 +169,12 @@ describe('prices.update', () => {
       call(appRouter.prices.update, { id: 'price_x' }, { context }),
     ).rejects.toThrow()
   })
+
+  it('mutationsEnabled が false なら更新を拒否する(認可導入までの暫定ガード)', async () => {
+    const context = testContext({ prices: { update: () => Promise.resolve(price({})) } }, false)
+
+    await expect(
+      call(appRouter.prices.update, { id: 'price_x', active: false }, { context }),
+    ).rejects.toThrow()
+  })
 })

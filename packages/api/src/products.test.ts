@@ -127,4 +127,12 @@ describe('products.update', () => {
       call(appRouter.products.update, { id: 'prod_x' }, { context }),
     ).rejects.toThrow()
   })
+
+  it('mutationsEnabled が false なら更新を拒否する(認可導入までの暫定ガード)', async () => {
+    const context = testContext({ products: { update: () => Promise.resolve(product({})) } }, false)
+
+    await expect(
+      call(appRouter.products.update, { id: 'prod_x', active: false }, { context }),
+    ).rejects.toThrow()
+  })
 })

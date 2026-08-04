@@ -17,6 +17,8 @@ export default defineEventHandler(async (event) => {
       get stripe() {
         return useStripe()
       },
+      // 変更系ガードのフラグ。既定 false で無認証の書き込みを塞ぐ(#15 で認可に置き換え)。
+      mutationsEnabled: useRuntimeConfig().enableUnsafeMutations,
     },
   })
 

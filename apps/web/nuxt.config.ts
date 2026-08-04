@@ -7,6 +7,9 @@ export default defineNuxtConfig({
     databaseUrl: process.env['DATABASE_URL'] ?? '',
     // 実行時に NUXT_STRIPE_SECRET_KEY で上書き可能。サーバー専用(先頭に public を付けない)。
     stripeSecretKey: process.env['STRIPE_SECRET_KEY'] ?? '',
+    // 変更系(作成・更新)プロシージャを許可するか。既定は無効で、無認証の決済系書き込みを
+    // 塞ぐ。認可(#15)導入までの暫定措置。有効化は実行時に NUXT_ENABLE_UNSAFE_MUTATIONS=true。
+    enableUnsafeMutations: false,
   },
   compatibilityDate: '2025-01-01',
   nitro: {

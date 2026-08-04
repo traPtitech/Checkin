@@ -1,6 +1,6 @@
 import type Stripe from 'stripe'
 import type { InvoiceView } from '@checkin/api-contract'
-import { pub } from './orpc'
+import { assertMutationsEnabled, pub } from './orpc'
 import { idOf, toListResponse } from './views'
 
 /** Stripe の Invoice を allowlist の InvoiceView に変換する(公開フィールドを明示選択)。 */
@@ -32,6 +32,9 @@ export const invoicesRouter = {
   }),
 
   create: pub.invoices.create.handler(async ({ input, context }) => {
+    // 無認証で Invoice を確定させないための暫定ガード(#15 の認可で置き換える)。
+    assertMutationsEnabled(context)
+
     // Invoice を作成 → 価格を項目として追加 → 確定して Stripe がホストする支払い URL を得る。
     // collection_method は明示的に send_invoice(リンク払い)に固定する。既定の
     // charge_automatically だと finalize 時点で顧客の既定支払い方法へ自動課金され得るが、

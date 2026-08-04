@@ -219,6 +219,18 @@ describe('invoices.create', () => {
     ).rejects.toThrow()
   })
 
+  it('mutationsEnabled が false なら作成を拒否する(認可導入までの暫定ガード)', async () => {
+    const context = testContext({ invoices: { create: () => Promise.resolve({ id: 'in_1' }) } }, false)
+
+    await expect(
+      call(
+        appRouter.invoices.create,
+        { customer: 'cus_1', price: 'price_1', days_until_due: 14, idempotency_key: 'idem_1' },
+        { context },
+      ),
+    ).rejects.toThrow()
+  })
+
   // 実装は hosted_invoice_url の null と undefined の両方をエラーにする。両腕を個別に行使する。
   it.each([
     ['null', null],

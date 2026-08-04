@@ -2,11 +2,12 @@ import type { Context } from './orpc'
 
 /**
  * テスト用の最小 Context。handler が実際に使う stripe リソースだけをスタブして渡す。
- * db は触らせない。
+ * db は触らせない。mutationsEnabled は既定で true(変更系ガードを通す)。ガード自体を
+ * 検証するテストでは false を渡す。
  */
-export function testContext(stripe: unknown): Context {
+export function testContext(stripe: unknown, mutationsEnabled = true): Context {
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- 実際に使う依存だけを供給する意図的なテストスタブ
-  return { db: {}, stripe } as unknown as Context
+  return { db: {}, stripe, mutationsEnabled } as unknown as Context
 }
 
 /**

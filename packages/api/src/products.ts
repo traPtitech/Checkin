@@ -1,6 +1,6 @@
 import type Stripe from 'stripe'
 import type { ProductView } from '@checkin/api-contract'
-import { pub } from './orpc'
+import { assertMutationsEnabled, pub } from './orpc'
 import { idOf, toListResponse } from './views'
 
 /** Stripe の Product を公開形 ProductView に変換する(公開フィールドを明示選択)。 */
@@ -28,6 +28,8 @@ export const productsRouter = {
   }),
 
   update: pub.products.update.handler(async ({ input, context }) => {
+    assertMutationsEnabled(context)
+
     const params: Stripe.ProductUpdateParams = {}
     if (input.active !== undefined) params.active = input.active
     if (input.name !== undefined) params.name = input.name
