@@ -51,10 +51,11 @@ packages/db            Drizzle スキーマ、MariaDB クライアント、マ�
 - クライアントはコントラクト(`@checkin/api-contract`)を `@orpc/contract` の
   `ContractRouterClient` で型付けしてインポートする — `apps/web` の UI コードに
   `@checkin/api`(サーバー実装)を絶対にインポートしないこと。
-- API 層のフィールド名は snake_case に統一する。入力を Stripe SDK のパラメータ
-  (`starting_after`・`days_until_due` 等)へ 1:1 で渡せ、出力 View も Stripe のフィールド名と
-  1:1 で変換層が薄く済むため。出力を allowlist(全フィールドを手で列挙)にした現在、snake_case は
-  透過ゆえに避けられないのではなく、この実装上の都合による選択。ドメイン系のエンドポイントも snake_case。
+- API 層のフィールド名は camelCase に統一する。消費側(TypeScript / Vue)と DB 層(drizzle も
+  camelCase)の慣習に揃える。出力を allowlist で全フィールド手書きしている今、Stripe の snake_case は
+  ハンドラの変換層で camelCase の View 名に対応づける(入力フィールドも同様に Stripe のパラメータ名へ
+  変換して渡す)。Stripe の enum の値(`one_time`・`send_invoice` 等)はフィールド名ではなくデータ値
+  なので変換しない。
 - 出力は allowlist にする: 各リソースの公開 View(`packages/api-contract/src/*.ts`)は
   公開するフィールドだけを `z.object` で明示列挙し、外部プロバイダのオブジェクトを透過しない。
   目的は PII・内部・将来増えるフィールドを漏らさないこと(セキュリティ)と、クライアント向けの

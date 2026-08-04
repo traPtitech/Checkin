@@ -8,7 +8,7 @@ const productView = z.object({
   active: z.boolean(),
   name: z.string(),
   description: z.string().nullable(),
-  default_price: z.string().nullable(),
+  defaultPrice: z.string().nullable(),
   created: z.number(),
 })
 

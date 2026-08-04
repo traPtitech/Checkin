@@ -31,7 +31,7 @@ function priceViewOf(o: Record<string, unknown> = {}) {
     product: 'prod_1',
     active: true,
     currency: 'jpy',
-    unit_amount: 4000,
+    unitAmount: 4000,
     type: 'one_time',
     nickname: null,
     created: 1680000000,
@@ -51,10 +51,11 @@ describe('prices.list', () => {
 
     await call(
       appRouter.prices.list,
-      { product: 'prod_x', active: false, type: 'recurring', starting_after: 'price_last' },
+      { product: 'prod_x', active: false, type: 'recurring', startingAfter: 'price_last' },
       { context },
     )
 
+    // 入力の startingAfter は Stripe のキー名 starting_after へ写像して渡す。
     expect(captured).toStrictEqual({
       product: 'prod_x',
       active: false,
@@ -77,7 +78,7 @@ describe('prices.list', () => {
     expect(captured).toStrictEqual({})
   })
 
-  it('続きがあれば next_cursor に末尾 ID を返し、allowlist のフィールドだけを返す', async () => {
+  it('続きがあれば nextCursor に末尾 ID を返し、allowlist のフィールドだけを返す', async () => {
     const context = makeContext({
       list: () =>
         Promise.resolve({
@@ -95,19 +96,19 @@ describe('prices.list', () => {
 
     const result = await call(appRouter.prices.list, {}, { context })
 
-    // has_more の時、next_cursor は末尾要素の id(次回の starting_after)。
-    expect(result.next_cursor).toBe('price_a')
+    // has_more の時、nextCursor は末尾要素の id(次回の startingAfter)。
+    expect(result.nextCursor).toBe('price_a')
     expect(result.data[0]).toStrictEqual(priceViewOf({ id: 'price_a' }))
   })
 
-  it('続きが無ければ next_cursor は null', async () => {
+  it('続きが無ければ nextCursor は null', async () => {
     const context = makeContext({
       list: () => Promise.resolve({ has_more: false, data: [price({ id: 'price_a' })] }),
     })
 
     const result = await call(appRouter.prices.list, {}, { context })
 
-    expect(result.next_cursor).toBeNull()
+    expect(result.nextCursor).toBeNull()
   })
 })
 

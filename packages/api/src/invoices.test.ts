@@ -36,11 +36,11 @@ describe('invoices.list', () => {
 
     const result = await call(
       appRouter.invoices.list,
-      { customer: 'cus_1', subscription: 'sub_1', status: 'open', collection_method: 'send_invoice' },
+      { customer: 'cus_1', subscription: 'sub_1', status: 'open', collectionMethod: 'send_invoice' },
       { context },
     )
 
-    // フィルタは Stripe のキー名で透過する。
+    // 入力の collectionMethod は Stripe のキー名 collection_method へ写像して透過する。
     expect(captured).toStrictEqual({
       customer: 'cus_1',
       subscription: 'sub_1',
@@ -52,14 +52,14 @@ describe('invoices.list', () => {
     expect(result.data[0]).toStrictEqual({
       id: 'in_1',
       status: 'open',
-      amount_due: 1000,
-      amount_paid: 0,
-      amount_remaining: 1000,
+      amountDue: 1000,
+      amountPaid: 0,
+      amountRemaining: 1000,
       created: 1680000000,
       customer: 'cus_1',
     })
-    // toListResponse 経由の一覧レスポンス(has_more:false なら next_cursor:null)に配線されていることを確認。
-    expect(result.next_cursor).toBeNull()
+    // toListResponse 経由の一覧レスポンス(has_more:false なら nextCursor:null)に配線されていることを確認。
+    expect(result.nextCursor).toBeNull()
   })
 
   it('customer が展開オブジェクトや null でも ID(または null)に正規化する', async () => {
@@ -105,9 +105,9 @@ describe('invoices.list', () => {
     expect(result.data[0]).toStrictEqual({
       id: 'in_1',
       status: 'paid',
-      amount_due: 0,
-      amount_paid: 1000,
-      amount_remaining: 0,
+      amountDue: 0,
+      amountPaid: 1000,
+      amountRemaining: 0,
       created: 1,
       customer: 'cus_9',
     })
@@ -149,7 +149,7 @@ describe('invoices.create', () => {
 
     const result = await call(
       appRouter.invoices.create,
-      { customer: 'cus_1', price: 'price_1', days_until_due: 14, idempotency_key: 'idem_1' },
+      { customer: 'cus_1', price: 'price_1', daysUntilDue: 14, idempotencyKey: 'idem_1' },
       { context },
     )
 
@@ -171,10 +171,10 @@ describe('invoices.create', () => {
     expect(calls.createOpts).toStrictEqual({ idempotencyKey: 'idem_1:create' })
     expect(calls.itemOpts).toStrictEqual({ idempotencyKey: 'idem_1:item' })
     expect(calls.finalizeOpts).toStrictEqual({ idempotencyKey: 'idem_1:finalize' })
-    expect(result).toStrictEqual({ invoice_id: 'in_1', payment_url: 'https://pay.example/in_1' })
+    expect(result).toStrictEqual({ invoiceId: 'in_1', paymentUrl: 'https://pay.example/in_1' })
   })
 
-  it('days_until_due:0(即時期限)も 0 のまま create に渡す', async () => {
+  it('daysUntilDue:0(即時期限)も 0 のまま create に渡す', async () => {
     let capturedCreate: unknown
     const context = testContext({
       invoices: {
@@ -190,7 +190,7 @@ describe('invoices.create', () => {
 
     await call(
       appRouter.invoices.create,
-      { customer: 'cus_1', price: 'price_1', days_until_due: 0, idempotency_key: 'idem_1' },
+      { customer: 'cus_1', price: 'price_1', daysUntilDue: 0, idempotencyKey: 'idem_1' },
       { context },
     )
 
@@ -203,7 +203,7 @@ describe('invoices.create', () => {
     })
   })
 
-  it('days_until_due 未指定は reject する(send_invoice 固定のため必須)', async () => {
+  it('daysUntilDue 未指定は reject する(send_invoice 固定のため必須)', async () => {
     const context = testContext({
       invoices: { create: () => Promise.resolve({ id: 'in_1' }) },
       invoiceItems: { create: () => Promise.resolve({}) },
@@ -212,8 +212,8 @@ describe('invoices.create', () => {
     await expect(
       call(
         appRouter.invoices.create,
-        // @ts-expect-error days_until_due は必須のため意図的に省略している
-        { customer: 'cus_1', price: 'price_1', idempotency_key: 'idem_1' },
+        // @ts-expect-error daysUntilDue は必須のため意図的に省略している
+        { customer: 'cus_1', price: 'price_1', idempotencyKey: 'idem_1' },
         { context },
       ),
     ).rejects.toThrow()
@@ -225,7 +225,7 @@ describe('invoices.create', () => {
     await expect(
       call(
         appRouter.invoices.create,
-        { customer: 'cus_1', price: 'price_1', days_until_due: 14, idempotency_key: 'idem_1' },
+        { customer: 'cus_1', price: 'price_1', daysUntilDue: 14, idempotencyKey: 'idem_1' },
         { context },
       ),
     ).rejects.toThrow()
@@ -249,7 +249,7 @@ describe('invoices.create', () => {
     await expect(
       call(
         appRouter.invoices.create,
-        { customer: 'cus_1', price: 'price_1', days_until_due: 14, idempotency_key: 'idem_1' },
+        { customer: 'cus_1', price: 'price_1', daysUntilDue: 14, idempotencyKey: 'idem_1' },
         { context },
       ),
     ).rejects.toThrow()

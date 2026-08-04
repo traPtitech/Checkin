@@ -10,7 +10,7 @@ function toProductView(product: Stripe.Product): ProductView {
     active: product.active,
     name: product.name,
     description: product.description,
-    default_price: idOf(product.default_price),
+    defaultPrice: idOf(product.default_price),
     created: product.created,
   }
 }
@@ -21,7 +21,7 @@ export const productsRouter = {
     const params: Stripe.ProductListParams = {}
     if (input.active !== undefined) params.active = input.active
     if (input.limit !== undefined) params.limit = input.limit
-    if (input.starting_after !== undefined) params.starting_after = input.starting_after
+    if (input.startingAfter !== undefined) params.starting_after = input.startingAfter
 
     const page = await context.stripe.products.list(params)
     return toListResponse(page, toProductView)

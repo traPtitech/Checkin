@@ -9,7 +9,7 @@ const priceView = z.object({
   product: z.string(),
   active: z.boolean(),
   currency: z.string(),
-  unit_amount: z.number().nullable(),
+  unitAmount: z.number().nullable(),
   type: z.string(),
   nickname: z.string().nullable(),
   created: z.number(),

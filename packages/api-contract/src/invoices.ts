@@ -13,9 +13,9 @@ import { listEnvelope, pagination } from './params'
 const invoiceView = z.object({
   id: z.string(),
   status: z.string().nullable(),
-  amount_due: z.number(),
-  amount_paid: z.number(),
-  amount_remaining: z.number(),
+  amountDue: z.number(),
+  amountPaid: z.number(),
+  amountRemaining: z.number(),
   created: z.number(),
   customer: z.string().nullable(),
 })
@@ -30,7 +30,7 @@ export const invoicesContract = {
         customer: z.string().min(1).optional(),
         subscription: z.string().min(1).optional(),
         status: z.enum(['draft', 'open', 'paid', 'uncollectible', 'void']).optional(),
-        collection_method: z.enum(['charge_automatically', 'send_invoice']).optional(),
+        collectionMethod: z.enum(['charge_automatically', 'send_invoice']).optional(),
         ...pagination,
       }),
     )
@@ -44,17 +44,17 @@ export const invoicesContract = {
         price: z.string().min(1),
         // 支払い期限(日数)。collection_method を send_invoice に固定しており、Stripe は
         // send_invoice の Invoice 確定時に支払い期限を要求するため必須。
-        days_until_due: z.number().int().min(0).max(365),
+        daysUntilDue: z.number().int().min(0).max(365),
         // リトライ安全のための冪等キー(クライアント生成)。多段フロー全体を安全に再試行できるよう
         // 必須にする。派生キーの suffix 予約分(最大9文字)を Stripe の 255 文字上限内に収めるため、
         // 246 文字までに制限する。
-        idempotency_key: z.string().min(1).max(246),
+        idempotencyKey: z.string().min(1).max(246),
       }),
     )
     .output(
       z.object({
-        invoice_id: z.string(),
-        payment_url: z.string(),
+        invoiceId: z.string(),
+        paymentUrl: z.string(),
       }),
     ),
 }

@@ -36,27 +36,27 @@ describe('checkout.sessions.list', () => {
 
     const result = await call(
       appRouter.checkout.sessions.list,
-      { customer: 'cus_1', payment_intent: 'pi_1', status: 'complete', limit: 3 },
+      { customer: 'cus_1', paymentIntent: 'pi_1', status: 'complete', limit: 3 },
       { context },
     )
 
-    // customer / payment_intent は Stripe のキー名で透過する。
+    // 入力の paymentIntent は Stripe のキー名 payment_intent へ写像して渡す。
     expect(captured).toStrictEqual({
       customer: 'cus_1',
       payment_intent: 'pi_1',
       status: 'complete',
       limit: 3,
     })
-    expect(result.next_cursor).toBe('cs_1')
+    expect(result.nextCursor).toBe('cs_1')
     // toStrictEqual で allowlist を厳密に検証: customer_email/internal は含まれない。
     expect(result.data[0]).toStrictEqual({
       id: 'cs_1',
       status: 'complete',
-      amount_total: 2198,
-      amount_subtotal: 1998,
+      amountTotal: 2198,
+      amountSubtotal: 1998,
       created: 1680000000,
       customer: 'cus_1',
-      payment_intent: 'pi_1',
+      paymentIntent: 'pi_1',
     })
   })
 
@@ -86,15 +86,15 @@ describe('checkout.sessions.list', () => {
     const result = await call(appRouter.checkout.sessions.list, {}, { context })
 
     expect(result.data[0]?.customer).toBe('cus_9')
-    expect(result.data[0]?.payment_intent).toBe('pi_9')
+    expect(result.data[0]?.paymentIntent).toBe('pi_9')
     expect(result.data[0]).toStrictEqual({
       id: 'cs_1',
       status: 'complete',
-      amount_total: 1,
-      amount_subtotal: 1,
+      amountTotal: 1,
+      amountSubtotal: 1,
       created: 1,
       customer: 'cus_9',
-      payment_intent: 'pi_9',
+      paymentIntent: 'pi_9',
     })
   })
 })

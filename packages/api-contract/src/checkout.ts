@@ -10,11 +10,11 @@ import { listEnvelope, pagination } from './params'
 const checkoutSessionView = z.object({
   id: z.string(),
   status: z.string().nullable(),
-  amount_total: z.number().nullable(),
-  amount_subtotal: z.number().nullable(),
+  amountTotal: z.number().nullable(),
+  amountSubtotal: z.number().nullable(),
   created: z.number(),
   customer: z.string().nullable(),
-  payment_intent: z.string().nullable(),
+  paymentIntent: z.string().nullable(),
 })
 
 export type CheckoutSessionView = z.infer<typeof checkoutSessionView>
@@ -28,7 +28,7 @@ export const checkoutContract = {
         z.object({
           customer: z.string().min(1).optional(),
           subscription: z.string().min(1).optional(),
-          payment_intent: z.string().min(1).optional(),
+          paymentIntent: z.string().min(1).optional(),
           status: z.enum(['open', 'complete', 'expired']).optional(),
           ...pagination,
         }),

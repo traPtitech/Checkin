@@ -23,7 +23,7 @@ function productViewOf(o: Record<string, unknown> = {}) {
     active: true,
     name: '部費',
     description: null,
-    default_price: 'price_1',
+    defaultPrice: 'price_1',
     created: 1680000000,
     ...o,
   }
@@ -67,8 +67,8 @@ describe('products.list', () => {
     const result = await call(appRouter.products.list, {}, { context })
 
     expect(result.data[0]).toStrictEqual(productViewOf({ id: 'prod_a' }))
-    // toListResponse 経由の一覧レスポンス(has_more:false なら next_cursor:null)に配線されていることを確認。
-    expect(result.next_cursor).toBeNull()
+    // toListResponse 経由の一覧レスポンス(has_more:false なら nextCursor:null)に配線されていることを確認。
+    expect(result.nextCursor).toBeNull()
   })
 
   it('default_price が展開オブジェクト・未設定でも ID または null に正規化する', async () => {
@@ -87,8 +87,8 @@ describe('products.list', () => {
 
     const result = await call(appRouter.products.list, {}, { context })
 
-    expect(result.data[0]?.default_price).toBe('price_9')
-    expect(result.data[1]?.default_price).toBeNull()
+    expect(result.data[0]?.defaultPrice).toBe('price_9')
+    expect(result.data[1]?.defaultPrice).toBeNull()
   })
 })
 

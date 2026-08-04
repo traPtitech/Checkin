@@ -8,11 +8,11 @@ function toCheckoutSessionView(session: Stripe.Checkout.Session): CheckoutSessio
   return {
     id: session.id,
     status: session.status,
-    amount_total: session.amount_total,
-    amount_subtotal: session.amount_subtotal,
+    amountTotal: session.amount_total,
+    amountSubtotal: session.amount_subtotal,
     created: session.created,
     customer: idOf(session.customer),
-    payment_intent: idOf(session.payment_intent),
+    paymentIntent: idOf(session.payment_intent),
   }
 }
 
@@ -23,10 +23,10 @@ export const checkoutRouter = {
       const params: Stripe.Checkout.SessionListParams = {}
       if (input.customer) params.customer = input.customer
       if (input.subscription) params.subscription = input.subscription
-      if (input.payment_intent) params.payment_intent = input.payment_intent
+      if (input.paymentIntent) params.payment_intent = input.paymentIntent
       if (input.status !== undefined) params.status = input.status
       if (input.limit !== undefined) params.limit = input.limit
-      if (input.starting_after !== undefined) params.starting_after = input.starting_after
+      if (input.startingAfter !== undefined) params.starting_after = input.startingAfter
 
       const page = await context.stripe.checkout.sessions.list(params)
       return toListResponse(page, toCheckoutSessionView)

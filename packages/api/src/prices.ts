@@ -10,7 +10,7 @@ function toPriceView(price: Stripe.Price): PriceView {
     product: requireIdOf(price.product),
     active: price.active,
     currency: price.currency,
-    unit_amount: price.unit_amount,
+    unitAmount: price.unit_amount,
     type: price.type,
     nickname: price.nickname,
     created: price.created,
@@ -29,7 +29,7 @@ export const pricesRouter = {
     if (input.active !== undefined) params.active = input.active
     if (input.type !== undefined) params.type = input.type
     if (input.limit !== undefined) params.limit = input.limit
-    if (input.starting_after !== undefined) params.starting_after = input.starting_after
+    if (input.startingAfter !== undefined) params.starting_after = input.startingAfter
 
     const page = await context.stripe.prices.list(params)
     return toListResponse(page, toPriceView)

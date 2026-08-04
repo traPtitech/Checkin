@@ -8,9 +8,9 @@ function toInvoiceView(invoice: Stripe.Invoice): InvoiceView {
   return {
     id: invoice.id,
     status: invoice.status,
-    amount_due: invoice.amount_due,
-    amount_paid: invoice.amount_paid,
-    amount_remaining: invoice.amount_remaining,
+    amountDue: invoice.amount_due,
+    amountPaid: invoice.amount_paid,
+    amountRemaining: invoice.amount_remaining,
     created: invoice.created,
     customer: idOf(invoice.customer),
   }
@@ -23,9 +23,9 @@ export const invoicesRouter = {
     if (input.customer) params.customer = input.customer
     if (input.subscription) params.subscription = input.subscription
     if (input.status !== undefined) params.status = input.status
-    if (input.collection_method !== undefined) params.collection_method = input.collection_method
+    if (input.collectionMethod !== undefined) params.collection_method = input.collectionMethod
     if (input.limit !== undefined) params.limit = input.limit
-    if (input.starting_after !== undefined) params.starting_after = input.starting_after
+    if (input.startingAfter !== undefined) params.starting_after = input.startingAfter
 
     const page = await context.stripe.invoices.list(params)
     return toListResponse(page, toInvoiceView)
@@ -45,14 +45,14 @@ export const invoicesRouter = {
     // なるため、呼び出しごとに派生キーを付ける(Stripe はキー単位で応答をキャッシュする)。
     // 認可導入後はサーバ側でユーザーごとに名前空間化する(#15)。
     const idem = (suffix: string): { idempotencyKey: string } => ({
-      idempotencyKey: `${input.idempotency_key}:${suffix}`,
+      idempotencyKey: `${input.idempotencyKey}:${suffix}`,
     })
 
     const params: Stripe.InvoiceCreateParams = {
       customer: input.customer,
       collection_method: 'send_invoice',
       auto_advance: false,
-      days_until_due: input.days_until_due,
+      days_until_due: input.daysUntilDue,
     }
 
     const invoice = await context.stripe.invoices.create(params, idem('create'))
@@ -75,6 +75,6 @@ export const invoicesRouter = {
       throw new Error('確定した Invoice に支払い URL がありません')
     }
 
-    return { invoice_id: invoice.id, payment_url: finalized.hosted_invoice_url }
+    return { invoiceId: invoice.id, paymentUrl: finalized.hosted_invoice_url }
   }),
 }
