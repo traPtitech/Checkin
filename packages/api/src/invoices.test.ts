@@ -40,7 +40,7 @@ describe('invoices.list', () => {
       { context },
     )
 
-    // 入力の collectionMethod は Stripe のキー名 collection_method へ写像して透過する。
+    // 入力の collectionMethod は Stripe のキー名 collection_method へ変換して渡す。
     expect(captured).toStrictEqual({
       customer: 'cus_1',
       subscription: 'sub_1',

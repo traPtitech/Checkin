@@ -55,7 +55,7 @@ describe('prices.list', () => {
       { context },
     )
 
-    // 入力の startingAfter は Stripe のキー名 starting_after へ写像して渡す。
+    // 入力の startingAfter は Stripe のキー名 starting_after へ変換して渡す。
     expect(captured).toStrictEqual({
       product: 'prod_x',
       active: false,

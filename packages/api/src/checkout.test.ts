@@ -40,7 +40,7 @@ describe('checkout.sessions.list', () => {
       { context },
     )
 
-    // 入力の paymentIntent は Stripe のキー名 payment_intent へ写像して渡す。
+    // 入力の paymentIntent は Stripe のキー名 payment_intent へ変換して渡す。
     expect(captured).toStrictEqual({
       customer: 'cus_1',
       payment_intent: 'pi_1',
