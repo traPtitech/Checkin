@@ -14,12 +14,12 @@
     "@checkin/api": "workspace:*",
     "@checkin/api-contract": "workspace:*",
     "@checkin/db": "workspace:*",
-    "@orpc/client": "^1.14.13",
-    "@orpc/contract": "^1.14.13",
-    "@orpc/server": "^1.14.13",
-    "nuxt": "^4.4.8",
-    "stripe": "^22.4.0",
-    "vue": "^3.5.40"
+    "@orpc/client": "^1.15.0",
+    "@orpc/contract": "^1.15.0",
+    "@orpc/server": "^1.15.0",
+    "nuxt": "^4.5.2",
+    "stripe": "^22.6.1",
+    "vue": "^3.5.42"
   },
   "devDependencies": {
     "@nuxt/eslint": "^1.16.0",
