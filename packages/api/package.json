@@ -16,7 +16,7 @@
     "stripe": "^22.4.0"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
+    "@types/node": "^24.13.4",
     "typescript": "^6.0.0",
     "vitest": "^4.1.10"
   }
