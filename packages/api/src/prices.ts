@@ -20,7 +20,7 @@ function toPriceView(price: Stripe.Price): PriceView {
 /** 価格プロシージャ — Stripe の Price を Checkin API として公開する。 */
 export const pricesRouter = {
   retrieve: pub.prices.retrieve.handler(async ({ input, context }) =>
-    toPriceView(await context.stripe.prices.retrieve(input.id)),
+    toPriceView(await context.stripe.sdk.prices.retrieve(input.id)),
   ),
 
   list: pub.prices.list.handler(async ({ input, context }) => {
@@ -31,12 +31,12 @@ export const pricesRouter = {
     if (input.limit !== undefined) params.limit = input.limit
     if (input.startingAfter !== undefined) params.starting_after = input.startingAfter
 
-    const page = await context.stripe.prices.list(params)
+    const page = await context.stripe.sdk.prices.list(params)
     return toListResponse(page, toPriceView)
   }),
 
   update: pub.prices.update.handler(async ({ input, context }) => {
     assertMutationsEnabled(context)
-    return toPriceView(await context.stripe.prices.update(input.id, { active: input.active }))
+    return toPriceView(await context.stripe.sdk.prices.update(input.id, { active: input.active }))
   }),
 }

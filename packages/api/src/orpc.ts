@@ -10,7 +10,11 @@ import { contract } from '@checkin/api-contract'
  */
 export interface Context {
   db: Database
-  stripe: Stripe
+  /**
+   * Stripe SDK への到達経路。プロシージャは Context の stripe.sdk から SDK を取得する。
+   * sdk プロパティで Stripe を返すオブジェクトなら、プロシージャを変えずに実体を差し替えられる。
+   */
+  stripe: { sdk: Stripe }
   /** 変更系(作成・更新)を許可するか。方針は project.md、機構は assertMutationsEnabled を参照。 */
   mutationsEnabled: boolean
 }

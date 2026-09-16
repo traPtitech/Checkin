@@ -172,10 +172,23 @@ describe('prices.update', () => {
   })
 
   it('mutationsEnabled が false なら更新を拒否する(認可導入までの暫定ガード)', async () => {
-    const context = testContext({ prices: { update: () => Promise.resolve(price({})) } }, false)
+    let called = false
+    const context = testContext(
+      {
+        prices: {
+          update: () => {
+            called = true
+            return Promise.resolve(price({}))
+          },
+        },
+      },
+      false,
+    )
 
     await expect(
       call(appRouter.prices.update, { id: 'price_x', active: false }, { context }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(expect.objectContaining({ code: 'FORBIDDEN' }))
+    // ガードより後ろで Stripe への書き込みが起きていないことを見る(ガードを書き込みの後ろへ動かす変更を検出する)。
+    expect(called).toBe(false)
   })
 })

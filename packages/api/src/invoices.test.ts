@@ -220,7 +220,18 @@ describe('invoices.issue', () => {
   })
 
   it('mutationsEnabled が false なら作成を拒否する(認可導入までの暫定ガード)', async () => {
-    const context = testContext({ invoices: { create: () => Promise.resolve({ id: 'in_1' }) } }, false)
+    let called = false
+    const context = testContext(
+      {
+        invoices: {
+          create: () => {
+            called = true
+            return Promise.resolve({ id: 'in_1' })
+          },
+        },
+      },
+      false,
+    )
 
     await expect(
       call(
@@ -228,7 +239,11 @@ describe('invoices.issue', () => {
         { customer: 'cus_1', price: 'price_1', daysUntilDue: 14, idempotencyKey: 'idem_1' },
         { context },
       ),
-    ).rejects.toThrow()
+    ).rejects.toThrow(expect.objectContaining({ code: 'FORBIDDEN' }))
+    // ガードより後ろで Stripe への書き込みが起きていないことを見る(ガードを書き込みの後ろへ動かす変更を検出する)。
+    // 記録するのはスタブが供給する invoices.create だけでよい。後続の invoiceItems.create と
+    // invoices.finalizeInvoice はスタブに無く、到達すれば TypeError になって上の検査が落ちる。
+    expect(called).toBe(false)
   })
 
   // 実装は hosted_invoice_url の null と undefined の両方をエラーにする。両ケースを個別に検証する。

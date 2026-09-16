@@ -27,7 +27,7 @@ export const invoicesRouter = {
     if (input.limit !== undefined) params.limit = input.limit
     if (input.startingAfter !== undefined) params.starting_after = input.startingAfter
 
-    const page = await context.stripe.invoices.list(params)
+    const page = await context.stripe.sdk.invoices.list(params)
     return toListResponse(page, toInvoiceView)
   }),
 
@@ -55,9 +55,9 @@ export const invoicesRouter = {
       days_until_due: input.daysUntilDue,
     }
 
-    const invoice = await context.stripe.invoices.create(params, idem('create'))
+    const invoice = await context.stripe.sdk.invoices.create(params, idem('create'))
 
-    await context.stripe.invoiceItems.create(
+    await context.stripe.sdk.invoiceItems.create(
       {
         customer: input.customer,
         pricing: { price: input.price },
@@ -66,7 +66,7 @@ export const invoicesRouter = {
       idem('item'),
     )
 
-    const finalized = await context.stripe.invoices.finalizeInvoice(
+    const finalized = await context.stripe.sdk.invoices.finalizeInvoice(
       invoice.id,
       undefined,
       idem('finalize'),
