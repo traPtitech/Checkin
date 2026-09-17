@@ -28,7 +28,7 @@ export const checkoutRouter = {
       if (input.limit !== undefined) params.limit = input.limit
       if (input.startingAfter !== undefined) params.starting_after = input.startingAfter
 
-      const page = await context.stripe.checkout.sessions.list(params)
+      const page = await context.stripe.sdk.checkout.sessions.list(params)
       return toListResponse(page, toCheckoutSessionView)
     }),
   },
