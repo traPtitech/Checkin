@@ -15,15 +15,24 @@ import { adminProc, userProc, type Context } from './orpc'
  * 「この入力はそもそも検証を通る」という別の理由でないことを示せない。
  */
 
-/** 認可だけを差し替えた最小の Context。ハンドラは呼ばれないので他の依存は供給しない。 */
+/**
+ * 認可だけを差し替えた最小の Context。ハンドラは呼ばれないので他の依存は供給しない。
+ *
+ * 落とす側の 2 つのヘルパは**違うコード**で投げる。同じコードにすると、ビルダーが
+ * `requireUser` と `requireAdmin` を取り違えていても同じ結果になり、取り違えを観測できない。
+ * 実物の `requireAdmin` が投げるコードとは独立に、ここではどちらが呼ばれたかの目印として使う。
+ */
 function contextWith(auth: { pass: boolean }): Context {
-  const deny = (): never => {
+  const denyUser = (): never => {
     throw new ORPCError('UNAUTHORIZED', { message: 'login required' })
+  }
+  const denyAdmin = (): never => {
+    throw new ORPCError('FORBIDDEN', { message: 'accountant only' })
   }
   // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- 認可の検査だけを見るので、ハンドラが動くための依存は供給しない
   return {
-    requireUser: auth.pass ? () => ({ userId: 'u1', mailHash: 'h1' }) : deny,
-    requireAdmin: auth.pass ? () => ({ traqId: 'alice' }) : deny,
+    requireUser: auth.pass ? () => ({ userId: 'u1', mailHash: 'h1' }) : denyUser,
+    requireAdmin: auth.pass ? () => ({ traqId: 'alice' }) : denyAdmin,
     assertCsrf: () => {},
   } as unknown as Context
 }
@@ -51,7 +60,7 @@ describe('認可の検査は入力検証より前に走る', () => {
     throw new Error('handler must not be reached')
   })
 
-  it('userProc: 認可が落ちる呼び出しは、入力が不正でも UNAUTHORIZED になる', async () => {
+  it('userProc: 認可が落ちる呼び出しは、入力が不正でも requireUser が投げたコードになる', async () => {
     const code = await codeOf(() =>
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- 契約の入力型で弾かれる入力を渡すため、呼び出し時だけ型を外す
       call(userHandler, INVALID_INPUT as never, { context: contextWith({ pass: false }) }),
@@ -67,12 +76,14 @@ describe('認可の検査は入力検証より前に走る', () => {
     expect(code).toBe('BAD_REQUEST')
   })
 
-  it('adminProc: 認可が落ちる呼び出しは、入力が不正でも UNAUTHORIZED になる', async () => {
+  it('adminProc: 認可が落ちる呼び出しは、入力が不正でも requireAdmin が投げたコードになる', async () => {
     const code = await codeOf(() =>
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- 同上
       call(adminHandler, INVALID_INPUT as never, { context: contextWith({ pass: false }) }),
     )
-    expect(code).toBe('UNAUTHORIZED')
+    // FORBIDDEN は contextWith が requireAdmin に与えた目印。UNAUTHORIZED なら requireUser が
+    // 呼ばれたことになり、ビルダーが取り違えている。
+    expect(code).toBe('FORBIDDEN')
   })
 
   it('adminProc: 認可が通る呼び出しでは、同じ入力が BAD_REQUEST になる', async () => {

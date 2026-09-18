@@ -28,6 +28,16 @@ const capabilityRouters = {
   payouts: payoutsRouter,
 }
 
+/**
+ * 4 つのルーターが実際に持つ経路。ルーターのキーから作るので、どれかに 14 個目の
+ * プロシージャが現れれば、この配列が増えて下の比較が落ちる。移した 13 と突き合わせる
+ * 対象をリテラルの列挙ではなく実物にするのは、列挙どうしを比べても増えた側を検出
+ * できないためである。
+ */
+const actualPaths = Object.entries(capabilityRouters).flatMap(
+  ([capability, router]) => Object.keys(router).map(procedure => `/${capability}/${procedure}`),
+)
+
 /** 移す前の形。auth 側 `router.ts` が持っていた `health.check` を足したもの。 */
 const withHealth = {
   ...capabilityRouters,
@@ -66,7 +76,7 @@ describe('health.check を移さなかったこと', () => {
     expect(await matches(withHealth, '/health/check')).toBe(true)
   })
 
-  it('移した 13 プロシージャの経路は一致する', async () => {
+  it('4 つのルーターが持つ経路は、移した 13 プロシージャと過不足なく一致する', async () => {
     const moved = [
       '/auth/requestEmailVerification',
       '/auth/me',
@@ -82,7 +92,10 @@ describe('health.check を移さなかったこと', () => {
       '/payouts/execute',
       '/payouts/markManuallyPaid',
     ]
-    expect(moved).toHaveLength(13)
+    // 実物のキーと突き合わせる。これで「移していないものが増えていない」ことも見る。
+    expect([...actualPaths].sort()).toEqual([...moved].sort())
+    expect(actualPaths).toHaveLength(13)
+    // 名前が一致するだけでなく、RPC の経路としても一致することを見る。
     for (const path of moved) {
       expect(await matches(capabilityRouters, path), path).toBe(true)
     }

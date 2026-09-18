@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 import { call, implement } from '@orpc/server'
 import { z } from 'zod'
@@ -19,6 +20,33 @@ import { contract } from '@checkin/api-contract'
  *
  * 意図して変えた差は {@link EXPECTED_DIFFERENCES} に列挙する。ここに無い差が出たら失敗する。
  */
+
+// ---------------------------------------------------------------------------
+// このテストが依拠している前提
+// ---------------------------------------------------------------------------
+
+/**
+ * このパッケージが解決する zod のメジャーバージョン。
+ *
+ * この比較は、`packages/api` が zod 3 を、`@checkin/api-contract` が zod 4 を解決することに
+ * 依拠している。`packages/api` を zod 4 へ上げると、上の `legacySchemas` も契約側と同じ版で
+ * 組まれることになり、比較が zod 4 どうしの自己比較に静かに変わる。そのとき受理範囲が
+ * 変わっていても差は出ないので、テストは緑のまま主張を測らなくなる。前提そのものを
+ * 検査に載せて、上げた日に落ちるようにする。
+ */
+function zodMajor(): number {
+  const pkg: unknown = createRequire(import.meta.url)('zod/package.json')
+  if (typeof pkg !== 'object' || pkg === null || !('version' in pkg) || typeof pkg.version !== 'string') {
+    return Number.NaN
+  }
+  return Number(pkg.version.split('.')[0])
+}
+
+describe('比較が依拠している前提', () => {
+  it('packages/api が解決する zod は major 3 である', () => {
+    expect(zodMajor()).toBe(3)
+  })
+})
 
 // ---------------------------------------------------------------------------
 // 移設前のスキーマ(auth ブランチの packages/api/src/router.ts の `.input(...)`)
