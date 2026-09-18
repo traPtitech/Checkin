@@ -3,7 +3,7 @@ import type { Context } from './orpc'
 /**
  * テスト用の最小 Context。第1引数には、handler が実際に使う Stripe SDK のリソースだけを
  * スタブしたオブジェクト(例: { prices: { list } })を、sdk で包まずにそのまま渡す。
- * Context の stripe は { sdk: Stripe } 型なので、包むのはこの関数の側で行い、handler からは
+ * Context の stripe は sdk ゲッターで SDK を返す StripeClient なので、包むのはこの関数の側で行い、handler からは
  * Context の stripe.sdk 経由で見えるようにする。db は触らせない。mutationsEnabled は既定で
  * true(変更系ガードを通す)。ガード自体を検証するテストでは false を渡す。
  */

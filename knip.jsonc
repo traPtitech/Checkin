@@ -1,8 +1,27 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
-  "ignore": ["**/.*/**"],
   "workspaces": {
-    ".": {},
+    ".": {
+      // scripts/e2e/ は実データ(実 Stripe / 実 Jomon)に対する E2E 検証を手で
+      // 実行するためのスクリプトで、アプリのコードからは import されない。
+      // 各 run_*.mjs を直接 node で起動し、共有処理を harness.mjs が持つ。
+      // entry として宣言しないと knip が未使用ファイルとして挙げる。残す理由は、
+      // 各 change の tasks.md に BLOCKED で残る E2E を後から実施するのに、
+      // この検証手段が要るためである。
+      "entry": ["scripts/e2e/*.mjs"],
+      "ignoreBinaries": [
+        // run_payout.mjs と run_special.mjs が execFileSync で呼ぶ MariaDB の
+        // クライアントで、npm のパッケージではなく検証を行うマシンに入って
+        // いるものを使う。npm の依存として宣言できないため knip に伝える。
+        "mysql"
+      ],
+      "ignoreDependencies": [
+        // `openspec` コマンドとしてのみ使う CLI で、ソースからは import しない。
+        // Knip は import 文から依存を辿るため、これを検出できない
+        // — https://knip.dev/reference/faq 参照
+        "@fission-ai/openspec"
+      ]
+    },
     "apps/web": {
       "ignoreDependencies": [
         // Vue SFC のコンパイル(ランタイムヘルパー、コンパイラマクロ)や

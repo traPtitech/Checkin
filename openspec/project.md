@@ -44,9 +44,11 @@ packages/db            Drizzle スキーマ、MariaDB クライアント、マ�
 
 - 新しい oRPC プロシージャ: まず `packages/api-contract/src/` に、入出力・エラースキーマ用の
   `oc`(`@orpc/contract`)を使って機能(capability)単位でグループ化しコントラクトを定義する。
-  次に `packages/api/src/router.ts`(`appRouter.<capability>.<procedure>`)で実装し、
-  `pub`(`packages/api/src/orpc.ts`、`implement(contract).$context<Context>()`)からハンドラを
-  構築する。DB へは `context.db` 経由でアクセスする。
+  次に実装を capability ごとのファイル(`packages/api/src/<capability>.ts`、または
+  `packages/api/src/<capability>/router.ts`)に置き、`packages/api/src/router.ts` はそれらを
+  `pub.router({...})` で束ねるだけにする(ハンドラを `router.ts` に直接書かない)。ハンドラは
+  `packages/api/src/orpc.ts` のビルダーから `<ビルダー>.<capability>.<procedure>.handler(...)`
+  の形で構築する。DB へは `context.db` 経由でアクセスする。
 - 新しいテーブル: `packages/db/src/schema.ts` に定義し、その後 `pnpm db:generate` して
   マイグレーションをコミットする。生成されたマイグレーション SQL を手動編集しないこと。
 - クライアントはコントラクト(`@checkin/api-contract`)を `@orpc/contract` の
@@ -72,24 +74,32 @@ packages/db            Drizzle スキーマ、MariaDB クライアント、マ�
   metadata に持たせないのは、Stripe metadata がクライアントから書き換え可能で権威を持てず、同定の
   根拠にすると偽装や不整合の余地が生じるため。出力にも載せないのは、traq_id が Stripe を経由しない内部の
   同定子で、決済 API のレスポンスに出すと customer ID ↔ traq_id の対応が利用者に露出して名寄せ・相関の
-  攻撃面を広げる一方、現在この値を必要とする消費者が無いため。必要時は DB を正本に customer ID から
-  逆引きする(#18)。
+  攻撃面を広げる一方、決済 API ではこの値を必要とする消費者が無いため。必要時は DB を正本に customer ID
+  から逆引きする(#18)。出力しない禁止の例外は `auth.me` である。呼び出し元自身の traqId を呼び出し元に
+  だけ返すもので、customer ID を含まないので対応の露出に当たらず、消費者(ヘッダーの会計担当者表示と
+  トップページのログイン表示)がある。
 - 公開 View の文字列フィールド(status・type 等)は Stripe の値をそのまま透過し、enum で狭めない。
   出力を今日の値集合で `z.enum` に固定すると、Stripe が新しい値を追加した時に正当な Stripe オブジェクトを
   出力検証が弾いて 500 になり、実データで壊れる。`z.string()` なら新値も通る。入力フィルタは自分が受理
   する値を決められるので enum で狭めてよい。
-- 現状すべてのプロシージャは無認証(`pub`)。変更系(作成・更新)は既定で無効化する
-  (`mutationsEnabled` / `assertMutationsEnabled`)。無認証のまま変更系を出すと、デプロイ済みの main では
-  「到達できない」ことだけが歯止めになり、Invoice 確定のような金銭・破壊的操作を誰でも叩ける。既定オフで
-  fail-closed にし、認可(#15)導入時に本来のチェックへ置き換える。
+- 認可はプロシージャごとにビルダーで与える(`packages/api/src/orpc.ts`)。`pub` は無認証、`userProc` は
+  課金対象の isct ユーザーが紐づいたセッション、`adminProc` は会計担当者を要求する。検査は oRPC の
+  ミドルウェアとして入力検証より前に走るので、認可を通らない呼び出しに入力の形は漏れない。
+- Stripe を薄く包む管理・配管層(prices・products・invoices・checkout)だけは認可を持たず、変更系
+  (作成・更新)を既定で無効化して塞いでいる(`mutationsEnabled` / `assertMutationsEnabled`)。無認証の
+  まま変更系を出すと「到達できない」ことだけが歯止めになり、Invoice 確定のような金銭・破壊的操作を
+  誰でも叩ける。既定オフで fail-closed にし、認可(#15)をこの層へ広げるときに本来のチェックへ
+  置き換える。
 - API の消費者は現状 `apps/web` の型付きクライアントのみで、契約とクライアントは常に同時
   デプロイされる。この前提(内部専用・co-deploy)を確定し、破壊的変更を許容してバージョニング
   機構は持たない。外部消費者を許すなら、その時点で互換性維持ポリシーを別途定める。
 - 現状の Stripe 系エンドポイント(prices・products・invoices・checkout)は Stripe を allowlist で
   薄く包む管理・配管層であって、会員向けのドメイン API ではない。`customer` や checkout session は
   Stripe の概念そのものなので、会員向けには「会費を払う・自分の支払い状況」といったドメイン言語の
-  API を別に建て、Stripe をバックエンドの裏に隠す(#27/#28/#35)。フロントがこの Stripe 形状の上に
-  会員向け UX を直接組むと密結合が固まるので避ける。
+  API を別に建て、Stripe をバックエンドの裏に隠す(#27/#28/#35)。「会費を払う」側は `membership`
+  capability(会費請求書の発行)が既にあるので、会員向けの追加はこちらに置く。`payments` の一覧は
+  会計担当者向け(`adminProc`)で、会員向けの「自分の支払い状況」はまだ無い。フロントがこの Stripe
+  形状の上に会員向け UX を直接組むと密結合が固まるので避ける。
 - ビルドを常にグリーンに保つこと: `pnpm lint`、`pnpm knip`、`pnpm typecheck`、`pnpm test`、
   `pnpm build`。
 

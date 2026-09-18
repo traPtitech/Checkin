@@ -18,19 +18,26 @@ export default withNuxt({
     // クラス全体を除外しておけば、新しいツールが増えてもこの設定を
     // 触る必要がなくなる。
     '**/.*/**',
+    // 手で実行する E2E 検証のスクリプト。アプリのコードからは import されず
+    // (knip.jsonc の entry 宣言を参照)、結果を stdout へ出す書き方も整形も
+    // アプリの規約と違う。掛かる指摘は
+    // `npx eslint 'scripts/e2e/**/*.mjs' --no-ignore` で数えられる。
+    'scripts/e2e/**',
   ],
 }, {
-  // Nuxt のページはルートに対応するため、単語1つのファイル名(index, login, ...)でも問題ない。
-  files: ['apps/web/app/pages/**/*.vue'],
+  // Nuxt のページはルートに、レイアウトは名前付きレイアウトに対応するため、
+  // 単語1つのファイル名(index, login, default, ...)でも問題ない。
+  files: ['apps/web/app/pages/**/*.vue', 'apps/web/app/layouts/**/*.vue'],
   rules: {
     'vue/multi-word-component-names': 'off',
   },
 }, {
   // server/plugins は Nitro が起動時に自動登録するもので、他コードから静的に import されない。
-  // そのため typescript-eslint の projectService が所有 tsconfig を見つけられず解析に失敗する
-  // (utils/routes は生成コードから参照され app プログラムに入るので問題にならない)。この
-  // ディレクトリだけ Nitro のサーバー tsconfig を明示し、型を考慮したルールを解決させる。
-  files: ['apps/web/server/plugins/**/*.ts'],
+  // server/ 配下のテストも Nitro の生成コードから参照されない。そのため typescript-eslint の
+  // projectService が所有 tsconfig を見つけられず解析に失敗する(utils/routes は生成コードから
+  // 参照され app プログラムに入るので問題にならない)。この2つだけ Nitro のサーバー tsconfig を
+  // 明示し、型を考慮したルールを解決させる。
+  files: ['apps/web/server/plugins/**/*.ts', 'apps/web/server/**/*.test.ts'],
   languageOptions: {
     parserOptions: {
       projectService: false,
