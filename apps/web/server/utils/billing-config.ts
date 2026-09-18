@@ -1,15 +1,11 @@
 import type { BillingConfig } from '@checkin/api'
+import { positiveNumberOr } from './config-value'
 
 let cached: BillingConfig | undefined
 
 // Every value read below comes from `runtimeConfig`, which Nuxt types as `string`
 // because each entry declares a string default in `nuxt.config.ts`. They are used
 // as-is: a `String()` wrapper or a `?? ''` fallback would be dead code.
-function num(value: string, fallback: number): number {
-  const n = Number(value)
-  return Number.isFinite(n) && n > 0 ? n : fallback
-}
-
 /**
  * Resolve the typed BillingConfig from Nuxt runtimeConfig (env-backed). Cached
  * per server instance. The domain layer in @checkin/api only sees this typed
@@ -32,7 +28,7 @@ export function resolveBillingConfig(): BillingConfig {
     stripeSecretKey: rc.stripeSecretKey,
     stripeWebhookSecret: rc.stripeWebhookSecret,
     connectWebhookSecret: rc.stripeConnectWebhookSecret,
-    invoiceDaysUntilDue: num(rc.invoiceDaysUntilDue, 7),
+    invoiceDaysUntilDue: positiveNumberOr(rc.invoiceDaysUntilDue, 7),
   }
   return cached
 }

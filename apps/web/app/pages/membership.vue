@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { ORPCError } from '@orpc/client'
-
 definePageMeta({ layout: 'default' })
 
 const { $orpc } = useNuxtApp()
@@ -63,6 +61,8 @@ const pending = ref(false)
 const errorMessage = ref<string | null>(null)
 const hostedInvoiceUrl = ref<string | null>(null)
 
+const errorMessageFor = createErrorMessageFor(membershipErrorMessages)
+
 async function onSubmit() {
   if (pending.value) {
     return
@@ -85,17 +85,6 @@ async function onSubmit() {
   finally {
     pending.value = false
   }
-}
-
-function errorMessageFor(e: unknown): string {
-  if (e instanceof ORPCError) {
-    // mail_hash mismatch (FORBIDDEN) — the resubmitted email is not the verified one.
-    if (e.code === 'FORBIDDEN') {
-      return '確認したメールと一致しません。確認時と同じメールアドレスを入力してください。'
-    }
-    return '発行に失敗しました。時間をおいて再度お試しください。'
-  }
-  return '発行に失敗しました。時間をおいて再度お試しください。'
 }
 </script>
 

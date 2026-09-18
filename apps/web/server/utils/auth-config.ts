@@ -1,4 +1,5 @@
 import type { AuthConfig } from '@checkin/api'
+import { positiveNumberOr } from './config-value'
 
 let cached: AuthConfig | undefined
 
@@ -11,11 +12,6 @@ function csv(value: string): string[] {
     .split(',')
     .map(s => s.trim())
     .filter(Boolean)
-}
-
-function num(value: string, fallback: number): number {
-  const n = Number(value)
-  return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
 /**
@@ -33,8 +29,8 @@ export function resolveAuthConfig(): AuthConfig {
     mailHashSecret: rc.mailHashSecret,
     allowedEmailDomains: domains.length ? domains : ['m.isct.ac.jp'],
     appOrigin: rc.appOrigin || 'http://localhost:3000',
-    emailVerificationTtlSec: num(rc.emailVerificationTtlSec, 1800),
-    sessionTtlSec: num(rc.sessionTtlSec, 2592000),
+    emailVerificationTtlSec: positiveNumberOr(rc.emailVerificationTtlSec, 1800),
+    sessionTtlSec: positiveNumberOr(rc.sessionTtlSec, 2592000),
     accountantTraqIds: csv(rc.accountantTraqIds),
     trustForwardAuth: rc.trustForwardAuth === '1',
     traq: {
@@ -53,7 +49,7 @@ export function resolveAuthConfig(): AuthConfig {
         host: rc.smtpHost,
         // 587 is the port for a connection that STARTTLS upgrades; 465 is the
         // one for a connection that is TLS from the start, and needs SMTP_SECURE.
-        port: num(rc.smtpPort, 587),
+        port: positiveNumberOr(rc.smtpPort, 587),
         secure: rc.smtpSecure === '1',
         user: rc.smtpUser,
         pass: rc.smtpPassword,
