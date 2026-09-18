@@ -29,7 +29,13 @@ export default defineNuxtConfig({
     // Mailer
     mailerDriver: process.env['MAILER_DRIVER'] ?? 'log',
     mailFrom: process.env['MAIL_FROM'] ?? 'noreply@localhost',
-    sendgridApiKey: process.env['SENDGRID_API_KEY'] ?? '',
+    // SMTP relay used by the `smtp` driver. Provider-neutral — any relay works,
+    // so switching provider is a change of these values only.
+    smtpHost: process.env['SMTP_HOST'] ?? '',
+    smtpPort: process.env['SMTP_PORT'] ?? '587',
+    smtpSecure: process.env['SMTP_SECURE'] ?? '',
+    smtpUser: process.env['SMTP_USER'] ?? '',
+    smtpPassword: process.env['SMTP_PASSWORD'] ?? '',
     // Membership collection / Stripe
     // 実行時に NUXT_STRIPE_SECRET_KEY で上書き可能。サーバー専用(先頭に public を付けない)。
     stripeSecretKey: process.env['STRIPE_SECRET_KEY'] ?? '',

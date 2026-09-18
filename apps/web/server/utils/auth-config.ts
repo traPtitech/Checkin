@@ -47,9 +47,17 @@ export function resolveAuthConfig(): AuthConfig {
       userIdField: rc.traqUserIdField || 'name',
     },
     mailer: {
-      driver: (rc.mailerDriver || 'log') === 'sendgrid' ? 'sendgrid' : 'log',
+      driver: rc.mailerDriver === 'smtp' ? 'smtp' : 'log',
       from: rc.mailFrom || 'noreply@localhost',
-      sendgridApiKey: rc.sendgridApiKey || undefined,
+      smtp: {
+        host: rc.smtpHost,
+        // 587 is the port for a connection that STARTTLS upgrades; 465 is the
+        // one for a connection that is TLS from the start, and needs SMTP_SECURE.
+        port: num(rc.smtpPort, 587),
+        secure: rc.smtpSecure === '1',
+        user: rc.smtpUser,
+        pass: rc.smtpPassword,
+      },
     },
   }
   return cached

@@ -36,7 +36,7 @@ flowchart LR
     DB[("DB（Users ＝ 対応表）")]
     ADP["Stripe アダプタ層"]
     TRAQ["traQ（OAuth）"]
-    MAIL["メール送信（SendGrid 等）"]
+    MAIL["メール送信（SMTP サーバー）"]
     STRIPE["Stripe（Customer / Invoice / Connect）"]
     JOMON["Jomon（経費精算）"]
 

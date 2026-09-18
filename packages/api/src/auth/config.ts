@@ -14,10 +14,27 @@ export interface TraqOAuthConfig {
   userIdField: string
 }
 
+/**
+ * SMTP relay settings for the production mailer. Provider-neutral: SendGrid's
+ * relay, for one, is host `smtp.sendgrid.net` with the literal string `apikey`
+ * as the user name and an API key as the password (SendGrid docs, Integrating
+ * with the SMTP API), so a change of provider changes these values and nothing
+ * else.
+ */
+export interface SmtpConfig {
+  host: string
+  port: number
+  /** True: TLS from the start of the connection. False: STARTTLS upgrades it. */
+  secure: boolean
+  user: string
+  pass: string
+}
+
 export interface MailerConfig {
-  driver: 'log' | 'sendgrid'
+  driver: 'log' | 'smtp'
   from: string
-  sendgridApiKey?: string
+  /** Read by the `smtp` driver only; the `log` driver never looks at it. */
+  smtp?: SmtpConfig
 }
 
 export interface AuthConfig {
