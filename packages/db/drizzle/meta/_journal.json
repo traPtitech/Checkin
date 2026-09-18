@@ -5,8 +5,71 @@
     {
       "idx": 0,
       "version": "5",
-      "when": 1781854772858,
-      "tag": "0000_giant_selene",
+      "when": 1781874606502,
+      "tag": "0000_black_khan",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1781877502412,
+      "tag": "0001_naive_stryfe",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1781882206587,
+      "tag": "0002_gifted_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1781882910210,
+      "tag": "0003_happy_cobalt_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1781883548651,
+      "tag": "0004_mature_sentinels",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1781884730370,
+      "tag": "0005_blushing_blindfold",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1781959782887,
+      "tag": "0006_wild_nemesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1782186295450,
+      "tag": "0007_high_vermin",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1782312508235,
+      "tag": "0008_sticky_shiva",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1782344833815,
+      "tag": "0009_unique_shinobi_shaw",
       "breakpoints": true
     }
   ]

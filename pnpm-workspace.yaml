@@ -4,6 +4,16 @@ packages:
 allowBuilds:
   esbuild: true
   unrs-resolver: true
+  # postinstall は shell 補完の案内を1行出すだけで、補完の導入自体は
+  # `openspec completion install` を実行したときにしか行われない。
+  # 生成物が無いので、実行しなくても lint・型チェック・テスト・ビルドに影響しない。
+  '@fission-ai/openspec': false
+  # postinstall は導入済みの Vue のメジャーバージョンを見て lib/index.* を
+  # そのバージョン用のものに差し替える。現在の配布物は差し替え前から Vue 3 用と
+  # 同じ内容だが、それは今の公開物がたまたまそうなっているだけで、
+  # vue-demi が保証している挙動ではない。Vue のメジャーバージョンが上がったときに
+  # 気付かないまま合わない shim を使うことがないよう、差し替えを実行させる。
+  vue-demi: true
 
 # @nuxt/eslint は独自に緩い "@nuxt/kit": "^4.4.8" 依存を宣言しており、
 # `nuxt` 自体が固定しているバージョンとは独立している。pnpm はこれらを
