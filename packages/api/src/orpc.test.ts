@@ -10,9 +10,11 @@ import { adminProc, userProc, type Context } from './orpc'
  * ミドルウェアと入力検証の実行順で、これは同梱の `@orpc/server` の挙動である。順序が
  * 変わればこの一般則は成り立たなくなるので、版を上げた日に落ちるようここで測る。
  *
- * 対にして見る。認可が落ちる Context では入力が不正でも UNAUTHORIZED が返り、認可が通る
- * Context では同じ不正な入力が BAD_REQUEST になる。後者が無いと、UNAUTHORIZED が返るのが
- * 「この入力はそもそも検証を通る」という別の理由でないことを示せない。
+ * 対にして見る。認可が落ちる Context では入力が不正でも、そのビルダーが呼んだ認可ヘルパが
+ * 投げたコードが返る(`userProc` は UNAUTHORIZED、`adminProc` は FORBIDDEN。どちらも下の
+ * `contextWith` が 2 つのヘルパを見分けるために与えた目印である)。認可が通る Context では
+ * 同じ不正な入力が BAD_REQUEST になる。後者が無いと、認可のコードが返るのが「この入力は
+ * そもそも検証を通る」という別の理由でないことを示せない。
  */
 
 /**

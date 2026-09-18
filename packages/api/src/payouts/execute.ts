@@ -99,6 +99,11 @@ export interface ProcessApprovedSummary {
    * Set when the approved-requests fetch itself failed: the run is reported with
    * an empty body and this top-level error indicator instead of throwing, so a
    * Jomon list/HTTP/zod failure never aborts the whole run with nothing recorded.
+   *
+   * Server-side only. `payouts.processApproved`'s output contract does not carry
+   * this key, so it is stripped from the RPC response and never reaches a client
+   * (fixed by `contract-surface.test.ts`). Operators read the reason from the log
+   * line the catch below writes.
    */
   listError?: string
 }
@@ -131,8 +136,11 @@ export async function processApprovedPayouts(
   // Batch-fetch isolation: the approved-requests pull happens BEFORE any per-item
   // work, so a list/HTTP/zod failure here would otherwise abort the whole run with
   // nothing recorded. Catch it, log, and RETURN the (empty) summary with a
-  // top-level `listError` so callers/tests see the fetch failed rather than a
-  // throw. No money has moved at this point. (Codex hardening: §batch-abort)
+  // top-level `listError` rather than throwing. No money has moved at this point.
+  // In-process callers and tests read `listError`; an RPC client does not, because
+  // the output contract drops the key (the failure text must not reach the public
+  // surface), so the reason lives in the log line below. (Codex hardening:
+  // §batch-abort)
   let requests: JomonTransferRequest[]
   try {
     requests = await deps.jomon.listApprovedTransferRequests()
