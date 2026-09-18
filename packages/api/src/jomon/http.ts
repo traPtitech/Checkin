@@ -1,3 +1,4 @@
+import { FetchError, ofetch } from 'ofetch'
 import { z } from 'zod'
 import type { JomonClient, JomonTransferRequest, JomonWriteBackResult } from './types'
 
@@ -64,6 +65,121 @@ function unwrapList(path: string, body: unknown): unknown[] {
 }
 
 /**
+ * Milliseconds one attempt may wait for a Jomon response to start arriving.
+ *
+ * Passed to ofetch as `timeout`, which aborts a request that has not completed
+ * in time; the option is disabled by default (ofetch README, "Timeout"), and
+ * before this the drivers set no bound of their own on one request either, so
+ * how long a payout run could stall on Jomon was left to the runtime.
+ *
+ * What this does NOT bound: ofetch clears the timeout in the `finally` of the
+ * `fetch` call and reads the response body after that, so the timeout covers
+ * only the wait for the response head. Measured against `ofetch@1.5.1`: when the
+ * head arrives at once and the body then stalls, the attempt's signal is never
+ * aborted and the read does not settle, however long it waits. A Jomon that
+ * answers and then stops sending is therefore still bounded by nothing but the
+ * runtime, exactly as it was before this change. Bounding that needs a second
+ * mechanism around the body and is out of scope here.
+ *
+ * 10s is a choice, not a measurement: these drivers have never run against live
+ * Jomon, so no round-trip figure for it exists. It is meant to sit well clear of
+ * a healthy call to a service on the same network while still bounding how long
+ * one attempt waits to hear anything back.
+ */
+export const JOMON_REQUEST_TIMEOUT_MS = 10_000
+
+/**
+ * Extra attempts allowed for a READ, passed to ofetch as `retry`.
+ *
+ * An answered request is retried only when its status is in `retryStatusCodes`,
+ * which defaults to 408, 409, 425, 429, 500, 502, 503, 504 (ofetch README, "Auto
+ * Retry"). That default is kept: it covers the transient and rate-limit answers,
+ * while a wrong token or a wrong path (401/403/404) fails on the first attempt
+ * instead of three times. 409 and 425 are in the default too; re-asking on those
+ * costs only time, because a read changes nothing on the Jomon side.
+ *
+ * ofetch's own default is 1 retry for a read. 2 is used so that one more attempt
+ * is made, separated by {@link JOMON_RETRY_DELAY_MS}, before the run gives up on
+ * the request; what the extra attempt adds to the wait for a response head is
+ * bounded by that delay and by {@link JOMON_REQUEST_TIMEOUT_MS}.
+ */
+export const JOMON_READ_RETRIES = 2
+
+/**
+ * Milliseconds between two attempts, passed to ofetch as `retryDelay`.
+ *
+ * ofetch defaults it to 0 (ofetch README, "Auto Retry"), which re-sends in the
+ * same instant the attempt failed, so every attempt of a read lands at once.
+ * 500ms spreads them out instead.
+ */
+export const JOMON_RETRY_DELAY_MS = 500
+
+/**
+ * The single ofetch instance the Jomon drivers issue every request through.
+ *
+ * Behaviour of ofetch that its README does not state, which this instance and
+ * the Jomon tests depend on. Read off the published `ofetch@1.5.1` build;
+ * re-check it when that version changes.
+ *
+ * - The Node entry point resolves `globalThis.fetch` on each call rather than
+ *   once at import time, so replacing `globalThis.fetch` after this module is
+ *   imported is observed. The README only says that `globalThis.fetch` is used
+ *   when it is available. The tests replace it to serve canned responses.
+ * - ofetch arms `timeout` only when the request carries no `signal`, and it
+ *   passes the options of the failed attempt — including the `AbortSignal` it
+ *   installed — into the retry. A retried attempt would therefore run under the
+ *   first attempt's signal, which by then is either already aborted or has had
+ *   its timer cleared and can never fire. Dropping `signal` in `onRequest`,
+ *   which ofetch calls at the start of every attempt, makes it arm a fresh
+ *   timeout each time. Nothing here passes a caller-supplied `signal`, so there
+ *   is none to lose.
+ * - An attempt that produced no response at all — a timeout, a refused
+ *   connection — is retried too: having no status, it is counted as a 500, which
+ *   is in the default `retryStatusCodes`. The README describes `retryStatusCodes`
+ *   only for answered requests. The one failure ofetch does NOT retry is an
+ *   `AbortError` raised when no `timeout` was set; the abort a `timeout` raises
+ *   is named `TimeoutError` instead, so it is retried.
+ * - `timeout` bounds only the wait for the response head, not the reading of the
+ *   body; see {@link JOMON_REQUEST_TIMEOUT_MS}.
+ *
+ * With the timeout armed per attempt, one read spends at most
+ * `(JOMON_READ_RETRIES + 1) * JOMON_REQUEST_TIMEOUT_MS` plus
+ * `JOMON_READ_RETRIES * JOMON_RETRY_DELAY_MS` waiting for response heads. That
+ * is NOT an upper bound on the read as a whole: the body is read outside the
+ * timeout, so a body that stalls adds time the sum does not count, and nothing
+ * here bounds it.
+ */
+const jomonFetch = ofetch.create({
+  timeout: JOMON_REQUEST_TIMEOUT_MS,
+  retryDelay: JOMON_RETRY_DELAY_MS,
+  onRequest({ options }) {
+    delete options.signal
+  },
+})
+
+/** Render a response body for an error message; an absent body renders empty. */
+function describeResponseBody(data: unknown): string {
+  if (data === undefined || data === null) {
+    return ''
+  }
+  return typeof data === 'string' ? data : JSON.stringify(data)
+}
+
+/**
+ * Render why a Jomon request failed.
+ *
+ * A response that came back is reported as `<status> <body>`, the same shape the
+ * drivers reported before they moved to ofetch. A timeout or a connection
+ * failure has no response, so its message is reported instead.
+ */
+function describeRequestFailure(err: unknown): string {
+  if (err instanceof FetchError && err.response) {
+    return `${String(err.status)} ${describeResponseBody(err.data)}`
+  }
+  return err instanceof Error ? err.message : String(err)
+}
+
+/**
  * Shared HTTP plumbing for the live Jomon drivers (`v1` / `v2`).
  *
  * Auth is a one-way Bearer service token (`JOMON_API_TOKEN`) against
@@ -91,29 +207,64 @@ export abstract class JomonHttpClient implements JomonClient {
   abstract listApprovedTransferRequests(): Promise<JomonTransferRequest[]>
   abstract writeBackResult(jomonRef: string, result: JomonWriteBackResult): Promise<void>
 
-  /** Issue an authenticated request against the Jomon API and return parsed JSON. */
+  /**
+   * Read from the Jomon API and return the parsed body.
+   *
+   * Retried up to {@link JOMON_READ_RETRIES} times: asking the same question
+   * again changes nothing on the Jomon side.
+   *
+   * ofetch parses the body, so a response that is not JSON no longer raises a
+   * parse error here. It arrives as whatever ofetch's own parsing made of it and
+   * is rejected by the STRICT zod schema the caller applies, so a malformed
+   * response still fails loudly.
+   */
   protected async getJson(path: string): Promise<unknown> {
-    const res = await this.request('GET', path)
-    const json: unknown = await res.json()
-    return json
+    return await this.send('GET', path, { retry: JOMON_READ_RETRIES })
   }
 
-  /** Issue an authenticated JSON request against the Jomon API. */
-  protected async request(method: string, path: string, body?: unknown): Promise<Response> {
+  /**
+   * Write to the Jomon API. NEVER retried.
+   *
+   * Whether Jomon treats a repeated write as a no-op is NOT known: these drivers
+   * have never run against live Jomon (see the TODO on this class), and the v1
+   * write-back marks a payee repaid — exactly the kind of call a second delivery
+   * could duplicate. So a write is sent once and the failure is reported to the
+   * caller, where `tryWriteBack` (payouts/execute.ts) already turns it into a
+   * warning and leaves the write-back for a later run. Confirming against the
+   * real Jomon v1 API what a repeated write-back does is what adding a retry
+   * here would need first.
+   *
+   * `retry: 0` is spelled out rather than left to ofetch's default (already 0
+   * for PUT/POST/PATCH/DELETE) so that a default set later on the shared ofetch
+   * instance cannot switch retries on for writes.
+   */
+  protected async writeJson(method: string, path: string, body: Record<string, unknown>): Promise<void> {
+    await this.send(method, path, { retry: 0, body })
+  }
+
+  /** Issue an authenticated request against the Jomon API under `options.retry`. */
+  private async send(
+    method: string,
+    path: string,
+    options: { retry: number, body?: Record<string, unknown> },
+  ): Promise<unknown> {
     const url = `${this.baseUrl.replace(/\/$/, '')}${path}`
-    const res = await fetch(url, {
-      method,
-      headers: {
-        // Forward-looking: live Jomon has no Bearer receiver yet (design D6).
-        authorization: `Bearer ${this.token}`,
-        ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-      },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    })
-    if (!res.ok) {
-      throw new Error(`Jomon ${method} ${path} failed: ${String(res.status)} ${await res.text()}`)
+    try {
+      return await jomonFetch<unknown>(url, {
+        method,
+        retry: options.retry,
+        headers: {
+          // Forward-looking: live Jomon has no Bearer receiver yet (design D6).
+          authorization: `Bearer ${this.token}`,
+        },
+        // ofetch serializes an object body and sets `content-type:
+        // application/json` for a PUT itself (README, "JSON Body").
+        ...(options.body !== undefined ? { body: options.body } : {}),
+      })
     }
-    return res
+    catch (err) {
+      throw new Error(`Jomon ${method} ${path} failed: ${describeRequestFailure(err)}`, { cause: err })
+    }
   }
 }
 
@@ -243,7 +394,7 @@ export class JomonV1Client extends JomonHttpClient {
     const appId = jomonRef.slice(0, sep)
     const trapId = jomonRef.slice(sep + 1)
     const repaidAt = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
-    await this.request(
+    await this.writeJson(
       'PUT',
       `/api/applications/${encodeURIComponent(appId)}/states/repaid/${encodeURIComponent(trapId)}`,
       { repaid_at: repaidAt },
