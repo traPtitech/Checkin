@@ -42,8 +42,15 @@ describe('isDuplicateKeyError', () => {
   })
 
   it('drizzle が包んだ形を cause から見つける', () => {
+    // 2026-09-18 に実測した形を写したもの。包んだ側は code も errno も持たず、
+    // 1 段下の cause が mysql2 のエラーである(詳細は `mysql-result.ts` のコメント)。
     expect(isDuplicateKeyError(
-      new Error('Failed query: insert ...', { cause: { code: 'ER_DUP_ENTRY' } }),
+      new Error('Failed query: insert into `membership_slots` ...', {
+        cause: Object.assign(new Error('Duplicate entry ... for key \'membership_slots_user_year_half_uq\''), {
+          code: 'ER_DUP_ENTRY',
+          errno: 1062,
+        }),
+      }),
     )).toBe(true)
   })
 

@@ -29,9 +29,17 @@ export function affectedRowCount(result: unknown): number {
 /**
  * Whether an error is a MySQL/MariaDB duplicate-key error (ER_DUP_ENTRY = 1062).
  *
- * Walks the `cause` chain because drizzle wraps the mysql2 error ("Failed query:
- * ...") and carries the original (with `code`/`errno`) as `.cause`. The walk is
- * bounded at 5 links so a self-referential chain cannot loop forever.
+ * Walks the `cause` chain because drizzle wraps the mysql2 error and carries the
+ * original (with `code`/`errno`) as `.cause`. Measured on 2026-09-18 with
+ * drizzle-orm 0.45.2 + mysql2 3.23.2 against MariaDB 11, by inserting a row that
+ * violates `membership_slots_user_year_half_uq` twice: the thrown value is a
+ * `DrizzleQueryError` ("Failed query: insert into `membership_slots` ...") that
+ * carries NEITHER `code` NOR `errno`, and its `.cause` (one link down, with no
+ * further `cause`) is the mysql2 `Error` with `code: 'ER_DUP_ENTRY'` and
+ * `errno: 1062`. So reading only the top level never detects a duplicate here.
+ * The walk is bounded at 5 links — more than the one link measured, so an added
+ * wrapper still resolves — and the bound stops a self-referential chain from
+ * looping forever.
  */
 export function isDuplicateKeyError(err: unknown): boolean {
   let cur: unknown = err
