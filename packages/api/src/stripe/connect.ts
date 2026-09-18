@@ -63,12 +63,24 @@ export async function getOrCreateConnectedAccount(
 
   // Conditional compare-and-set: only link if the column is still NULL. The
   // `unique` constraint on the column backs this up — should the IS NULL guard
-  // ever be lost to a race we treat the duplicate-key error as "lost the claim".
+  // ever be lost to a race, the duplicate-key error would mean "lost the claim"
+  // (but see the gap noted in the catch below).
   let won: boolean
   try {
     won = await claimConnectedAccountId(db, input.userId, created.id)
   }
   catch (err) {
+    // KNOWN GAP — the `won = false` below is currently unreachable.
+    // `isDuplicateKeyError` (bottom of this file) reads only the top level of the
+    // thrown value, but drizzle wraps the mysql2 error and carries the one holding
+    // `code`/`errno` as its `.cause` (measured; the chain is written out on
+    // `isDuplicateKeyError` in `../mysql-result.ts`), so a duplicate key is
+    // rethrown here. The ordinary lost-race path does not depend on this branch:
+    // `claimConnectedAccountId` returns false when the conditional UPDATE matched
+    // no row, and only the rarer case of the IS NULL guard itself being lost to a
+    // race reaches the constraint. Switching to the shared reader would change
+    // behaviour, so it is left to the follow-up issue that covers unifying the
+    // three copies.
     if (!isDuplicateKeyError(err)) {
       throw err
     }

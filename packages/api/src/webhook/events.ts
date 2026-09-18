@@ -24,6 +24,19 @@ export async function hasProcessedStripeEvent(db: Database, eventId: string): Pr
  * Idempotency rides on the `stripe_events.event_id` UNIQUE constraint: a
  * concurrent/duplicate insert fails with a duplicate-key error, which we treat
  * as "already processed". (payment-webhook spec: §event id による冪等処理)
+ *
+ * KNOWN GAP — the `false` return is currently unreachable. The local
+ * `isDuplicateKeyError` below reads only the top level of the thrown value, but
+ * drizzle wraps the mysql2 error and carries the one holding `code`/`errno` as
+ * its `.cause` (measured; the chain is written out on `isDuplicateKeyError` in
+ * `../mysql-result.ts`). So a real duplicate key is not recognised and the error
+ * is rethrown instead of reporting "already processed". Both callers
+ * (`processInvoicePaid` and the `account-updated` route) query
+ * `hasProcessedStripeEvent` before calling this, so an ordinary redelivery never
+ * reaches the insert; only two deliveries that pass that check concurrently do,
+ * and the loser surfaces an error that Stripe retries (the retry then stops at
+ * the query). Switching to the shared reader would change that behaviour, so it
+ * is left to the follow-up issue that covers unifying the three copies.
  */
 export async function recordStripeEventOnce(
   db: Database,
