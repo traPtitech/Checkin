@@ -14,6 +14,7 @@
     "@checkin/db": "workspace:*",
     "@orpc/server": "^1.14.13",
     "drizzle-orm": "^0.45.0",
+    "nodemailer": "^10.0.10",
     "ofetch": "^1.5.1",
     "stripe": "^22.4.0",
     "zod": "^4.4.3"

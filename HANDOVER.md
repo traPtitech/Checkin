@@ -46,7 +46,7 @@ traP の Stripe 集金・払い戻しシステム「Checkin」。design.md（リ
 | capability (spec) | change | 要点 |
 |---|---|---|
 | identity | add-auth-foundation (+traq) | 本人キー=`mail_hash`（HMAC-SHA256）。`users.traq_id`(unique) で traQ 連結。メール平文は非保存（非 PII の Stripe/traQ 参照は可） |
-| email-verification | add-auth-foundation | isct マジックリンク（`@m.isct.ac.jp`）。単回・期限・ハッシュ保存。Mailer アダプタ（log/SendGrid） |
+| email-verification | add-auth-foundation | isct マジックリンク（`@m.isct.ac.jp`）。単回・期限・ハッシュ保存。Mailer アダプタ（log/SMTP） |
 | session | add-auth-foundation (+traq) | **デュアル・アイデンティティ**: `{ traqId, isAdmin, userId, mailHash }`。`__Host-` cookie＋double-submit CSRF。`requireMember/User/Admin` |
 | admin-authorization | add-auth-foundation (+traq) | traQ OAuth(PKCE)=**会員セッション**。会計は env 許可リスト・サブセット（`isAdmin`） |
 | stripe-customer | add-membership-collection | Customer get-or-create（DB→検索→作成、競合安全）。アダプタ境界 |
@@ -102,7 +102,7 @@ traP の Stripe 集金・払い戻しシステム「Checkin」。design.md（リ
 
 ## 6. 環境変数（`.env.example` 参照）
 
-必須(実運用): `DATABASE_URL`, `MAIL_HASH_SECRET`(不変運用), `APP_ORIGIN`, `CHECKIN_ACCOUNTANT_TRAQ_IDS`, `TRAQ_OAUTH_*`(登録済みクライアント), `MAILER_DRIVER`(+SendGrid), `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`PRICE_*`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `JOMON_API_BASE_URL`/`JOMON_API_TOKEN`/`JOMON_API_VERSION`(default stub)。
+必須(実運用): `DATABASE_URL`, `MAIL_HASH_SECRET`(不変運用), `APP_ORIGIN`, `CHECKIN_ACCOUNTANT_TRAQ_IDS`, `TRAQ_OAUTH_*`(登録済みクライアント), `MAILER_DRIVER`(+`SMTP_*`), `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET`/`PRICE_*`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `JOMON_API_BASE_URL`/`JOMON_API_TOKEN`/`JOMON_API_VERSION`(default stub)。
 runtime override は Nuxt の `NUXT_` 接頭辞（例 `NUXT_DATABASE_URL`、`NUXT_MAIL_HASH_SECRET`）。
 
 ## 7. ローカル実行・検証
