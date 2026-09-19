@@ -181,11 +181,10 @@ export async function processApprovedPayouts(
       const result = await advancePayout(deps, config, req, { allowFailedRetry: false })
       tally(summary, result.outcome)
     }
-    catch (err) {
+    catch {
       summary.errored += 1
       summary.errors.push(req.jomonRef)
       // Swallow: isolation is the point. Detail is surfaced via the summary.
-      void err
     }
   }
 
