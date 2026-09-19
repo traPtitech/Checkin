@@ -16,10 +16,10 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
-    "mysql2": "^3.23.2"
+    "mysql2": "^3.24.4"
   },
   "devDependencies": {
-    "@types/node": "^24.13.3",
+    "@types/node": "^24.13.6",
     "drizzle-kit": "^0.31.10",
     "typescript": "^6.0.0"
   }
