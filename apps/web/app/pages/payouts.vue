@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ORPCError } from '@orpc/client'
 import type { PayoutView } from '@checkin/api-contract'
 
 definePageMeta({ layout: 'default' })
@@ -67,15 +66,7 @@ function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T
   return rest
 }
 
-function errorMessageFor(e: unknown): string {
-  if (e instanceof ORPCError) {
-    if (e.code === 'UNAUTHORIZED' || e.code === 'FORBIDDEN') {
-      return '会計セッションが必要です。会計でログインしてください。'
-    }
-    return '操作に失敗しました。Jomon／Stripe の接続状況をご確認ください。'
-  }
-  return '操作に失敗しました。時間をおいて再度お試しください。'
-}
+const errorMessageFor = createErrorMessageFor(payoutsErrorMessages)
 
 // --- List ---------------------------------------------------------------------
 const items = ref<PayoutView[]>([])

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ORPCError } from '@orpc/client'
 import type { PaymentView } from '@checkin/api-contract'
 
 definePageMeta({ layout: 'default' })
@@ -81,15 +80,7 @@ function emptyState(): ListState {
 const invoices = reactive<ListState>(emptyState())
 const checkout = reactive<ListState>(emptyState())
 
-function errorMessageFor(e: unknown): string {
-  if (e instanceof ORPCError) {
-    if (e.code === 'UNAUTHORIZED' || e.code === 'FORBIDDEN') {
-      return '会計セッションが必要です。会計でログインしてください。'
-    }
-    return '一覧の取得に失敗しました。Stripe の設定や接続状況をご確認ください。'
-  }
-  return '一覧の取得に失敗しました。時間をおいて再度お試しください。'
-}
+const errorMessageFor = createErrorMessageFor(paymentsErrorMessages)
 
 // Monotonic request tokens: a newer load (e.g. a filter change) supersedes an
 // in-flight one so a stale response can never overwrite the current filter. We

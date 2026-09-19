@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { ORPCError } from '@orpc/client'
-
 definePageMeta({ layout: 'default' })
 
 const { $orpc } = useNuxtApp()
@@ -43,23 +41,7 @@ const pending = ref(false)
 const errorMessage = ref<string | null>(null)
 const result = ref<{ invoiceId: string, hostedInvoiceUrl: string | null } | null>(null)
 
-function errorMessageFor(e: unknown): string {
-  if (e instanceof ORPCError) {
-    if (e.code === 'UNAUTHORIZED' || e.code === 'FORBIDDEN') {
-      return '会計セッションが必要です。会計でログインしてください。'
-    }
-    // CONFLICT / BAD_REQUEST carry a user-facing JA message from the API
-    // (既に支払い済み・期間重複／ドメイン不可・メール不一致・設定エラー).
-    if (e.code === 'CONFLICT') {
-      return e.message
-    }
-    if (e.code === 'BAD_REQUEST') {
-      return 'メールアドレスをご確認ください（許可されたドメイン宛である必要があります）。設定不備の可能性もあります。'
-    }
-    return '発行に失敗しました。時間をおいて再度お試しください。'
-  }
-  return '発行に失敗しました。時間をおいて再度お試しください。'
-}
+const errorMessageFor = createErrorMessageFor(specialInvoiceErrorMessages)
 
 async function onSubmit() {
   if (pending.value) {
