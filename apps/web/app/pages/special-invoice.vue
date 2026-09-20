@@ -234,12 +234,17 @@ function issueAnother() {
             description="空欄なら現在の活動年度。後期に開始する継続更新は翌年度（例: 2026）を指定します。"
           >
             <!--
-              `inputmode` goes through `v-bind`: @nuxt/ui 4 surfaces only the
-              members declared directly on `InputHTMLAttributes`, and `inputmode`
-              is inherited from `HTMLAttributes`, so `strictTemplates` rejects it
-              on the tag. Measured on 4.11.1: `readonly` / `maxlength` /
-              `minlength` / `step` (direct members) are accepted on the tag;
-              `inputmode` / `spellcheck` / `tabindex` (inherited) are not.
+              `inputmode` goes through `v-bind`: @nuxt/ui declares its own
+              `InputHTMLAttributes` as a `Pick` of Vue's (see
+              `@nuxt/ui/dist/runtime/types/html.d.ts`), and `UInput` accepts on
+              the tag only the HTML attribute names that `Pick` lists.
+              `inputmode` is not one of them, so `strictTemplates` rejects it
+              there, while a `v-bind` object is not checked against the
+              declared props.
+              The type check is the only difference. Neither `inputmode` nor
+              listed names such as `readonly` and `maxlength` appear in
+              `UInput`'s `defineProps`, so all of them stay in `$attrs`, which
+              `UInput` (`inheritAttrs: false`) binds onto the inner `<input>`.
             -->
             <UInput
               v-model.number="form.activityYear"

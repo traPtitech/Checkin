@@ -14,10 +14,11 @@ const admin = computed(() => me.value?.admin ?? false)
 const loginHref = `/login?redirect=${encodeURIComponent('/payouts')}`
 
 // Attributes the row alerts pass through to their root element. `size` is not a
-// declared prop of UAlert in @nuxt/ui 3.3.7, so it renders as a plain `size`
-// attribute. It is kept so the rendered markup is unchanged; `strictTemplates`
-// rejects undeclared attributes written directly on the tag, while a `v-bind`
-// object is not checked against the declared props.
+// declared prop of UAlert — `AlertProps` in
+// `@nuxt/ui/dist/runtime/components/Alert.vue.d.ts` does not list it — so it
+// renders as a plain `size` attribute. It is kept so the rendered markup is
+// unchanged; `strictTemplates` rejects undeclared attributes written directly on
+// the tag, while a `v-bind` object is not checked against the declared props.
 const alertFallthroughAttrs = { size: 'sm' }
 
 // --- Status filter ------------------------------------------------------------
