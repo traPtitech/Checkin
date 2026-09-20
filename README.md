@@ -23,7 +23,7 @@ openspec/         OpenSpec の仕様と変更提案
 ## 動作要件
 
 - Node.js 24(`.nvmrc`)
-- pnpm 11+
+- pnpm 12+
 - Docker(ローカル MariaDB 用)
 - [gitleaks](https://github.com/gitleaks/gitleaks#installing) — pre-commit フックがこれなしでは
   コミットを拒否する。CI でもスキャンするが、それはプッシュが GitHub に届いた後なので、
