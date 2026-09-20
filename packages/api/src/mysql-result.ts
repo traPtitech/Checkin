@@ -30,8 +30,8 @@ export function affectedRowCount(result: unknown): number {
  * Whether an error is a MySQL/MariaDB duplicate-key error (ER_DUP_ENTRY = 1062).
  *
  * Walks the `cause` chain because drizzle wraps the mysql2 error and carries the
- * original (with `code`/`errno`) as `.cause`. Measured on 2026-09-18 with
- * drizzle-orm 0.45.2 + mysql2 3.23.2 against MariaDB 11, by inserting a row that
+ * original (with `code`/`errno`) as `.cause`. Measured on 2026-09-20 with
+ * drizzle-orm 0.45.2 + mysql2 3.24.4 against MariaDB 11, by inserting a row that
  * violates `membership_slots_user_year_half_uq` twice: the thrown value is a
  * `DrizzleQueryError` ("Failed query: insert into `membership_slots` ...") that
  * carries NEITHER `code` NOR `errno`, and its `.cause` (one link down, with no
