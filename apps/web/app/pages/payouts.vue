@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { PayoutView } from '@checkin/api-contract'
+import type { AlertProps } from '@nuxt/ui'
 
 definePageMeta({ layout: 'default' })
 
@@ -13,13 +14,14 @@ const admin = computed(() => me.value?.admin ?? false)
 // Accountant (traQ) login is a full-page Nitro route, so use a real <a href>.
 const loginHref = `/login?redirect=${encodeURIComponent('/payouts')}`
 
-// Attributes the row alerts pass through to their root element. `size` is not a
-// declared prop of UAlert — `AlertProps` in
-// `@nuxt/ui/dist/runtime/components/Alert.vue.d.ts` does not list it — so it
-// renders as a plain `size` attribute. It is kept so the rendered markup is
-// unchanged; `strictTemplates` rejects undeclared attributes written directly on
-// the tag, while a `v-bind` object is not checked against the declared props.
-const alertFallthroughAttrs = { size: 'sm' }
+// Compact styling for the per-row alerts in the 操作 column. UAlert declares no
+// `size` variant, so the size is set through `ui`, which @nuxt/ui documents as
+// the way to override slot styles. The values match the rest of the row:
+// `text-xs` is the size of the sibling result paragraphs, `size-4` the icon size
+// of the `size="xs"` buttons above. The type annotation keeps the keys checked
+// against the declared slots — an object literal passed straight to `:ui` is
+// checked the same way, a `const` without the annotation is not.
+const rowAlertUi: AlertProps['ui'] = { root: 'p-2 gap-2', title: 'text-xs', icon: 'size-4' }
 
 // --- Status filter ------------------------------------------------------------
 // `ALL` is the "すべて" sentinel → sent to the API as `status: undefined`. It must
@@ -588,7 +590,7 @@ onMounted(() => {
                     v-if="executeError[row.jomonRef]"
                     color="error"
                     variant="subtle"
-                    v-bind="alertFallthroughAttrs"
+                    :ui="rowAlertUi"
                     icon="i-lucide-circle-alert"
                     :title="executeError[row.jomonRef]"
                   />
@@ -611,7 +613,7 @@ onMounted(() => {
                     v-if="markPaidError[row.jomonRef]"
                     color="error"
                     variant="subtle"
-                    v-bind="alertFallthroughAttrs"
+                    :ui="rowAlertUi"
                     icon="i-lucide-circle-alert"
                     :title="markPaidError[row.jomonRef]"
                   />
@@ -658,7 +660,7 @@ onMounted(() => {
                     v-if="row.userId && onboardingError[row.userId]"
                     color="error"
                     variant="subtle"
-                    v-bind="alertFallthroughAttrs"
+                    :ui="rowAlertUi"
                     icon="i-lucide-circle-alert"
                     :title="onboardingError[row.userId]"
                   />
