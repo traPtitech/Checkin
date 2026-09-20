@@ -234,17 +234,31 @@ function issueAnother() {
             description="空欄なら現在の活動年度。後期に開始する継続更新は翌年度（例: 2026）を指定します。"
           >
             <!--
-              `inputmode` goes through `v-bind`: @nuxt/ui declares its own
-              `InputHTMLAttributes` as a `Pick` of Vue's (see
-              `@nuxt/ui/dist/runtime/types/html.d.ts`), and `UInput` accepts on
-              the tag only the HTML attribute names that `Pick` lists.
-              `inputmode` is not one of them, so `strictTemplates` rejects it
-              there, while a `v-bind` object is not checked against the
-              declared props.
-              The type check is the only difference. Neither `inputmode` nor
-              listed names such as `readonly` and `maxlength` appear in
-              `UInput`'s `defineProps`, so all of them stay in `$attrs`, which
-              `UInput` (`inheritAttrs: false`) binds onto the inner `<input>`.
+              `inputmode` goes through `v-bind` because the type check rejects
+              it on the tag. Measured on 2026-09-20 with @nuxt/ui 4.11.1 and
+              vue-tsc 3.3.11, under the `strictTemplates` and
+              `fallthroughAttributes` settings in nuxt.config.ts:
+              `<UInput inputmode="numeric">` is TS2353, while
+              `v-bind="{ inputmode: 'numeric' }"` passes.
+
+              Do not turn that into a rule for which names the tag takes.
+              @nuxt/ui declares its own `InputHTMLAttributes` as a `Pick` of
+              Vue's (`@nuxt/ui/dist/runtime/types/html.d.ts`) and `InputProps`
+              inherits it through `/** @vue-ignore */ Omit<…>`, but that list
+              predicts neither direction: under the same settings `style`,
+              absent from it, draws no error, and `enterkeyhint`, whose TS
+              spelling `enterKeyHint` is in it, is TS2561. The error names the
+              type the tag is checked against — `VNodeProps &
+              AllowedComponentProps & ComponentCustomProps & { … }` — which is
+              wider than the props @nuxt/ui declares.
+
+              Only the type check differs. Neither `inputmode` nor `readonly`
+              nor `maxlength` is in `UInput`'s `defineProps`, so `inputmode`
+              stays in `$attrs`, which `Input.vue` (`inheritAttrs: false`)
+              spreads onto the inner `<input>` with
+              `v-bind="{ ...$attrs, ...ariaAttrs }"`. That is read from the
+              installed package; the rendered markup itself is not verified,
+              the repository having no way to test `.vue` rendering (#57).
             -->
             <UInput
               v-model.number="form.activityYear"
