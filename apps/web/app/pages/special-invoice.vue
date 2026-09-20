@@ -24,8 +24,11 @@ interface SpecialInvoiceForm {
   coverage: 'zenki' | 'kouki'
   /**
    * Free-text; empty → server defaults to the current activity year. Typed as
-   * `string | number` because `<UInput type="number">` writes a number into the
-   * model whenever the field parses as one.
+   * `string | number` because the input writes a number into the model whenever
+   * the field parses as one. `looseToNumber` returns its argument when
+   * `parseFloat` gives NaN, so "" stays "". The `.number` modifier on `v-model`
+   * is what makes @nuxt/ui 4 type the model as `string | number`; the runtime
+   * coercion itself is already on because of `type="number"`.
    */
   activityYear: string | number
 }
@@ -135,15 +138,8 @@ function issueAnother() {
           <p class="text-xs text-muted">
             支払いページ URL（本人へ転送してください）
           </p>
-          <!--
-            `readonly` goes through `v-bind`: UInput sets `inheritAttrs: false`
-            and binds `$attrs` onto its inner `<input>`, so the attribute is not
-            one of its declared props. `strictTemplates` rejects it when written
-            on the tag, while a `v-bind` object is not checked against the
-            declared props, so the `<input>` receives it as before.
-          -->
           <UInput
-            v-bind="{ readonly: true }"
+            :readonly="true"
             :model-value="result.hostedInvoiceUrl"
             size="sm"
             class="w-full"
@@ -238,12 +234,15 @@ function issueAnother() {
             description="空欄なら現在の活動年度。後期に開始する継続更新は翌年度（例: 2026）を指定します。"
           >
             <!--
-              `inputmode` goes through `v-bind` for the same reason as the
-              `readonly` above: it is bound onto UInput's inner `<input>` through
-              `$attrs`, not through a declared prop.
+              `inputmode` goes through `v-bind`: @nuxt/ui 4 surfaces only the
+              members declared directly on `InputHTMLAttributes`, and `inputmode`
+              is inherited from `HTMLAttributes`, so `strictTemplates` rejects it
+              on the tag. Measured on 4.11.1: `readonly` / `maxlength` /
+              `minlength` / `step` (direct members) are accepted on the tag;
+              `inputmode` / `spellcheck` / `tabindex` (inherited) are not.
             -->
             <UInput
-              v-model="form.activityYear"
+              v-model.number="form.activityYear"
               v-bind="{ inputmode: 'numeric' }"
               type="number"
               placeholder="現在の活動年度"
