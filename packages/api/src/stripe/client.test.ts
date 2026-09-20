@@ -15,15 +15,15 @@ describe('StripeClient', () => {
 
   it('生成した SDK は固定した API バージョンを報告する', () => {
     const client = createStripeClient('sk_test_dummy')
-    // getApiField は stripe 22.4.0 の型定義(cjs/stripe.core.d.ts)にあるが README には無い。
+    // getApiField は stripe 22.6.2 の型定義(cjs/stripe.core.d.ts)にあるが README には無い。
     // 公式ドキュメントに書かれていない挙動に依拠していることをここに残す。
-    expect(client.sdk.getApiField('version')).toBe('2026-07-29.dahlia')
+    expect(client.sdk.getApiField('version')).toBe('2026-08-26.dahlia')
   })
 
   /**
    * 固定を丸ごと外す変異(`{ apiVersion: ... }` を消す)は、生成した SDK を読むだけでは検出
    * できない。stripe-node は指定が無いときその版の既定(同じ文字列)を入れるためである
-   * (22.4.0 の `cjs/stripe.core.js` の `version: props.apiVersion || DEFAULT_API_VERSION`、
+   * (22.6.2 の `cjs/stripe.core.js` の `version: props.apiVersion || DEFAULT_API_VERSION`、
    * および README の `apiVersion` の行「未設定ならリリース時点の最新を使う」)。
    * そこで、指定がコンストラクターへ渡っていること自体を、コンストラクターを差し替えて見る。
    */
@@ -41,7 +41,7 @@ describe('StripeClient', () => {
       const { createStripeClient: create } = await import('./client')
       const sdk = create('sk_test_dummy').sdk
       expect(sdk).toBeDefined()
-      expect(calls).toEqual([['sk_test_dummy', { apiVersion: '2026-07-29.dahlia' }]])
+      expect(calls).toEqual([['sk_test_dummy', { apiVersion: '2026-08-26.dahlia' }]])
     }
     finally {
       vi.doUnmock('stripe')
