@@ -25,7 +25,7 @@ export class StripeClient {
       // deliberate review of the wire-format change. Omitting it would not keep the
       // version stable: stripe-node then uses the latest version its own release
       // carries (README, `apiVersion` config row) — it would only make the change silent.
-      this.client = new Stripe(this.secretKey, { apiVersion: '2026-07-29.dahlia' })
+      this.client = new Stripe(this.secretKey, { apiVersion: '2026-08-26.dahlia' })
     }
     return this.client
   }
