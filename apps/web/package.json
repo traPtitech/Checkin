@@ -14,7 +14,7 @@
     "@checkin/api": "workspace:*",
     "@checkin/api-contract": "workspace:*",
     "@checkin/db": "workspace:*",
-    "@nuxt/ui": "^3.3.7",
+    "@nuxt/ui": "^4.11.1",
     "@orpc/client": "^1.15.1",
     "@orpc/contract": "^1.15.1",
     "@orpc/server": "^1.15.1",

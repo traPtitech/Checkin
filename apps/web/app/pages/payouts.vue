@@ -636,16 +636,8 @@ onMounted(() => {
                     <p class="text-xs text-muted">
                       onboarding URL（本人へ転送してください）
                     </p>
-                    <!--
-                      `readonly` goes through `v-bind`: UInput sets
-                      `inheritAttrs: false` and binds `$attrs` onto its inner
-                      `<input>`, so the attribute is not one of its declared
-                      props. `strictTemplates` rejects it when written on the
-                      tag, while a `v-bind` object is not checked against the
-                      declared props, so the `<input>` receives it as before.
-                    -->
                     <UInput
-                      v-bind="{ readonly: true }"
+                      :readonly="true"
                       :model-value="onboardingUrl[row.userId]"
                       size="sm"
                       class="w-full"
@@ -703,14 +695,9 @@ onMounted(() => {
               label="参照メモ（振込参照番号など・任意）"
               name="manualPaidNote"
             >
-              <!--
-                `maxlength` goes through `v-bind` for the same reason as the
-                `readonly` above: UTextarea sets `inheritAttrs: false` and binds
-                `$attrs` onto its inner `<textarea>`, so it is not a declared prop.
-              -->
               <UTextarea
                 v-model="confirmNote"
-                v-bind="{ maxlength: 255 }"
+                :maxlength="255"
                 :rows="3"
                 placeholder="例: 銀行振込 参照番号 1234567890"
                 class="w-full"
