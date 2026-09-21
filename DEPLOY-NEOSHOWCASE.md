@@ -33,8 +33,11 @@ member auth は **両アプリ Soft**（Off でも Hard でもなく Soft）。�
 - 各アプリは NeoShowcase の **ビルトイン MariaDB**（「Use MariaDB」）→ `NS_MARIADB_USER/PASSWORD/HOSTNAME/PORT/DATABASE` が env 発行。
 - **member auth は両方 Soft**。
 - **ファイルシステムは再起動で初期化**。永続データは MariaDB。Jomon 画像(LocalStorage)は揮発前提。
-- **Runtime 上限: 1 CPU / 180MiB**。Go は余裕、Nuxt Node は低負荷なら可（OOM 注意、自動シャットダウン Blocking 推奨）。
-- アクセス URL は `*.trap.show` / `*.trap.games`。証明書は Let's Encrypt 制限（50/week）ありドメイン慎重に。
+- **Runtime 上限: 1 CPU / 150MiB**（`traPtitech/manifest` の `ns-system/config/ns.yaml` の `components.controller.k8s.resources.limits` が `cpu: "1"`・`memory: "150Mi"`。この値は `resourceRequirements`（`pkg/infrastructure/backend/k8simpl/config.go`）を通ってアプリのコンテナの `Resources` になる）。**この上限はアプリ側から変更できない**。アプリの実行時設定は公開 API の `RuntimeConfig`（`api/proto/neoshowcase/protobuf/gateway.proto`）で渡すが、そのフィールドは `use_mariadb`・`use_mongodb`・`entrypoint`・`command`・`auto_shutdown` の 5 つで CPU とメモリの項目が無く、`gateway.proto` 全体を `cpu`・`memory`・`resource`・`limit` で大文字小文字を無視して探しても、当たるのは取得件数と期間を指定する `limit`・`limit_seconds` の 3 箇所だけである。ここで `gateway.proto` を公開 API として扱えるのは、同じディレクトリにある 3 つの `.proto` のうち、この 1 つだけが `service APIService` を宣言し、`controller.proto` のほうは `ControllerService` ほか NeoShowcase 内部のサービスを宣言しているからである。Go は余裕、Nuxt Node は低負荷なら可（OOM 注意）。**ただしこの 2 つの見込みは測っていない。**
+- **自動シャットダウンを有効にすると常時稼働しなくなる**。有効時、NeoShowcase は StatefulSet を `replicas` 0 で作り、起動を sablier のミドルウェアに委ねる（`pkg/infrastructure/backend/k8simpl/synchronize_runtime.go` が `useSablier`（同じディレクトリの `backend.go`）の真のときに `replicas` を 0 にする）。`useSablier` が真になるのは、sablier が設定で有効であることと、アプリの `DeployType` が `DeployTypeRuntime` であることと、`RuntimeConfig` の `AutoShutdown.Enabled` が真であることの 3 つが揃ったときである。traP の設定では sablier が有効である（`ns.yaml` の `components.controller.k8s.middleware.sablier`）。
+- **アクセス URL はワイルドカードの直下 1 ラベルにする**（例 `checkin-dev.trap.show`）。`WildcardDomains` 型のメソッド `TLSTargetDomain`（`pkg/domain/backend.go`）は、**設定されたワイルドカードドメインのどれかに FQDN が一致したときだけ**最左のラベルを `*` に置き換え、一致しなければ FQDN をそのまま返す（一致の判定は `pkg/domain/app_website.go` の `ContainsDomain`）。traP が登録しているワイルドカードドメインは `*.trap.show` と `*.trap.games` である（`ns.yaml` の `components.controller.k8s.tls.certManager.wildcard.domains`。この項目は `pkg/infrastructure/backend/k8simpl/config.go` の定義に付いたコメントのとおり cert-manager が DNS レコードを設定できるドメインの宣言であって、発行済みの証明書の一覧ではない）。証明書は丸めた後の名前 1 つにつき 1 件で、`pkg/infrastructure/backend/k8simpl/synchronize.go` の `SynchronizeShared` が `TLSTargetDomains` の各要素から 1 件ずつ作る。重複を除いているのは `SynchronizeShared` ではなく、`TLSTargetDomains` を組む `pkg/usecase/cdservice/app_deploy_helper.go` の `_collectSharedResources` が `map[string]struct{}` を経由する処理のほうである。直下 1 ラベルなら `*.trap.show` に丸まるので、**同じ名前に丸まる他のアプリと 1 件の証明書を共有することになり、アプリを増やしても証明書は増えない**。2 段以上の名前（`dev.checkin.trap.show`）は `*.checkin.trap.show` に丸まるので、その名前の証明書が別に 1 件要る。**発行元は本番の Let's Encrypt** なので（`ns.yaml` の `components.controller.k8s.tls.certManager.issuer.name` が `cluster-issuer`、`traPtitech/manifest` の `cert-manager/cluster-issuer.yaml` の ACME `server` が `https://acme-v02.api.letsencrypt.org/directory`）、発行数には Let's Encrypt の規定の上限がかかる。公式のレート制限のページ（`https://letsencrypt.org/docs/rate-limits/`。2026-09-21 に取得、HTTP 200）の "New Certificates per Registered Domain" は、登録ドメイン 1 つにつき 7 日ごとに 50 件までで、これはどのアカウントからの要求も数える全体の上限だと述べている。**`trap.show` が登録ドメインなので、この枠は同じドメインの下にある traP の全アプリで共有される**。
+
+> 上の各項のうち、**挙動についての結論（Runtime 上限をアプリ側から変更できないこと、自動シャットダウンで `replicas` が 0 になること、証明書が丸めた後の名前 1 つにつき 1 件であること）は、NeoShowcase のリポジトリの `docs/` に記載が無く、実装から読んだものである**。`docs/` を `resource`・`memory`・`replicas`・`sablier`・`TLSTargetDomain` で大文字小文字を無視して再帰的に探すと一致は 0 件で、`certificate` の 1 件は `docs/architecture.md` の「Compatibility with Various Backends」の表の行、`wildcard` の 2 件は `docs/development.md` のローカル開発用ドメインの記述であり、いずれも上の結論を述べたものではない。設定項目そのもの（`auto_shutdown` を含む）は `docs/dbschema/application_config.md` に載っている。読んだ版は `traPtitech/NeoShowcase` の `ac0776e`、設定は `traPtitech/manifest` の `33131ea`。
 
 ---
 
@@ -80,7 +83,7 @@ member auth は **両アプリ Soft**（Off でも Hard でもなく Soft）。�
 
 ### 2-2. ビルド設定（Dockerfile 不要）
 **A. Runtime Command（推奨）**
-- Base Image: `node:22-alpine`
+- Base Image: `node:24-alpine`（`.nvmrc` が `24`。**`.nvmrc` を上げたらこの版も追随させる**）
 - Build Command: `corepack enable && pnpm install --frozen-lockfile && pnpm build`
 - Entrypoint（`NS_MARIADB_*`→`DATABASE_URL` 生成→migrate→起動）:
   ```sh
@@ -119,6 +122,8 @@ Checkin は値を Nuxt runtimeConfig から読む。runtimeConfig は**ビルド
 
 > `CHECKIN_DEV_LOGIN` は設定しない（本番ビルドで 404 だが念のため）。
 
+> **`NUXT_JOMON_API_BASE_URL` には公開 URL を使う**。`traPtitech/manifest` の `ns-apps/network-policy.yaml` は `Egress` のみを定め、ユーザーアプリが置かれる `ns-apps` 名前空間宛ての規則を持たない。インターネット向けの 2 本は `cidr` が `0.0.0.0/0` と `::/0` なので `cidr` だけを見ると全て許可に見えるが、どちらにも `except` が付いている。IPv6 側の `except` は `fc00::/7`・`fe80::/10` と、`# Pod CIDR`・`# Service CIDR` とコメントされた 2 つなので、**クラスター内のアドレス宛てがこの規則から外れることは宣言から読める**。IPv4 側の `except` はプライベート IPv4 アドレスの 3 つ（`10.0.0.0/8`・`172.16.0.0/12`・`192.168.0.0/16`）だけで、`ns-apps` の Pod と Service の IPv4 アドレスがそこに入るかは、`clusterCIDR`・`serviceCIDR`・`podCIDR`・`cluster-cidr`・`service-cidr` を manifest 全体に当てた一致が 0 件で CIDR の宣言が無いため、**この宣言からは確かめられない**。確かめたのはこのポリシーの宣言の内容だけで、公開 URL への通信が実際に到達することは測っていない。
+
 ---
 
 ## 3. 相互配線とデプロイ後の確認
@@ -144,7 +149,8 @@ Checkin は値を Nuxt runtimeConfig から読む。runtimeConfig は**ビルド
 - **`NS_MARIADB_*` → アプリ期待名へのマッピング**: Checkin は entrypoint で `DATABASE_URL` 生成。Jomon は `MARIADB_*` を読むので値コピー or ENTRYPOINT 変換。
 - **member auth は Soft**（Off だとブラウザの traQ identity が取れない／Hard だと webhook・Bearer が弾かれる）。
 - **再起動でディスク揮発**: Jomon 画像（LocalStorage）は消える。払い戻しに無関係。
-- **Runtime 180MiB**: Nuxt Node OOM 時は自動シャットダウン(Blocking)＋低負荷で対処。
+- **Runtime のメモリ上限**: Nuxt Node の OOM は低負荷運用で対処する。上限の値と出どころは §0。
+- **自動シャットダウン**: 有効にしたときの挙動は §0。メモリ上限への対処を決める前に読む。
 - **実装状況**: forward-auth/Swift フォールバック（Jomon `local/checkin-dev-env`）と forward-auth（Checkin `main`）は実装・コミット済み。Checkin は Dockerfile 不要（Command/Buildpack）。
 
 ---
