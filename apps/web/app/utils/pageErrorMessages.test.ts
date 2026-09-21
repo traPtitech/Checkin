@@ -67,7 +67,7 @@ const cases: { input: string, caught: () => unknown, shown: Record<Page, string>
   },
   {
     input: 'an ORPCError with code CONFLICT and no message',
-    // @orpc/client 1.14.13 fills in a default message for a known code, so
+    // @orpc/client 1.15.1 fills in a default message for a known code, so
     // `/special-invoice` passes `Conflict` through rather than an empty string.
     // Measured, not documented behaviour, so the version is named here.
     caught: () => new ORPCError('CONFLICT'),
@@ -142,7 +142,8 @@ describe.each(PAGES)('%s', (page) => {
  * The cases above run the specs, not the pages. This pins the one link they
  * cannot follow — that the page builds its `errorMessageFor` from the spec
  * exercised here — which no import can reach, because a `<script setup>` block
- * cannot contain ES module exports (measured with @vue/compiler-sfc 3.5.40).
+ * cannot contain ES module exports (the version this was measured with is named
+ * in the comment on `pageErrorMessages.ts`).
  *
  * It does not check how the page renders the returned text, nor that the page
  * calls `errorMessageFor` on every failure path it has.

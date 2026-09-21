@@ -2,7 +2,7 @@
  * What each page shows for an `$orpc` failure. This lives here rather than in
  * the pages so that the tests can import it: a `<script setup>` block cannot
  * contain ES module exports at all, so a page cannot hand its wording to a
- * test. Measured with `@vue/compiler-sfc` 3.5.40, which rejects such a block
+ * test. Measured with `@vue/compiler-sfc` 3.5.43, which rejects such a block
  * with "<script setup> cannot contain ES module exports". Each page builds its
  * `errorMessageFor` by passing one of these to `createErrorMessageFor`.
  * Auto-imported by Nuxt from `app/utils`.
