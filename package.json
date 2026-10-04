@@ -22,15 +22,15 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@fission-ai/openspec": "1.13.1",
-    "@types/node": "^24.13.6",
+    "@fission-ai/openspec": "1.14.0",
+    "@types/node": "^24.19.0",
     "eslint": "^10.11.0",
     "eslint-plugin-vuejs-accessibility": "^2.6.0",
     "husky": "^9.1.7",
-    "knip": "^6.37.0",
-    "lint-staged": "^17.5.1",
+    "knip": "^6.39.0",
+    "lint-staged": "^17.6.0",
     "playwright-core": "^1.61.1",
     "typescript": "^6.0.0",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.3"
   }
 }
